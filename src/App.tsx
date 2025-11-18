@@ -40,7 +40,7 @@ export default function App() {
     try {
       setLoading(true);
 
-      // делаем тестовый запрос, чтобы проверить авторизацию
+      // Проверяем авторизацию тестовым запросом
       const res = await fetch("/api/perevozki", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -52,13 +52,15 @@ export default function App() {
         try {
           const data = (await res.json()) as ApiError;
           if (data.error) message = data.error;
-        } catch {}
+        } catch {
+          // не JSON — оставляем стандартный текст
+        }
         setError(message);
         setAuth(null);
         return;
       }
 
-      // если всё ок — сохраняем учётку и показываем экран Грузов
+      // Авторизация ок
       setAuth({ login, password });
       setActiveTab("cargo");
       setError(null);
@@ -200,7 +202,6 @@ function CargoPage({ auth }: CargoPageProps) {
         }
 
         const data = await res.json();
-        // предполагаем, что API возвращает массив
         const list = Array.isArray(data) ? data : data.items || [];
         if (!cancelled) setItems(list);
       } catch (e: any) {
@@ -257,17 +258,23 @@ function CargoPage({ auth }: CargoPageProps) {
 
             <div className="cargo-row">
               <span className="cargo-label">Мест</span>
-              <span className="cargo-value">{item.Mest ?? item.Mest || "-"}</span>
+              <span className="cargo-value">
+                {item.Mest || item.mest || "-"}
+              </span>
             </div>
 
             <div className="cargo-row">
               <span className="cargo-label">Вес, кг</span>
-              <span className="cargo-value">{item.PW || item.Weight || "-"}</span>
+              <span className="cargo-value">
+                {item.PW || item.Weight || "-"}
+              </span>
             </div>
 
             <div className="cargo-row">
               <span className="cargo-label">Сумма</span>
-              <span className="cargo-value">{item.Sum || item.Total || "-"}</span>
+              <span className="cargo-value">
+                {item.Sum || item.Total || "-"}
+              </span>
             </div>
           </div>
         ))}
