@@ -11,13 +11,21 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 40px 16px;
+  padding: 40px 16px 80px; /* снизу оставляем место под таббар */
   box-sizing: border-box;
+}
+
+.page-with-tabs {
+  padding-bottom: 80px;
 }
 
 .card {
   width: 100%;
   max-width: 520px;
+}
+
+.card-content {
+  padding-bottom: 8px;
 }
 
 .logo-text {
@@ -35,7 +43,7 @@ body {
 }
 
 .title {
-  margin: 16px 0 8px;
+  margin: 0 0 8px;
   font-size: 22px;
   font-weight: 700;
 }
@@ -99,7 +107,7 @@ body {
 }
 
 .checkbox-row a {
-  color: #4c2fff; /* фиолетовый, как в примере */
+  color: #4c2fff;
   text-decoration: underline;
 }
 
@@ -127,4 +135,86 @@ body {
   margin-top: 14px;
   font-size: 13px;
   color: #d30000;
+}
+
+/* ---------- Грузы ---------- */
+
+.cargo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.cargo-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 13px;
+}
+
+.cargo-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.cargo-row.main {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cargo-label {
+  color: #6b7280;
+}
+
+.cargo-value {
+  text-align: right;
+}
+
+/* ---------- ТАББАР ---------- */
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  padding-bottom: 64px; /* место под таббар */
+  box-sizing: border-box;
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 60px;
+  background: #05070b;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 4px 6px 8px;
+  box-sizing: border-box;
+}
+
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tab-icon {
+  font-size: 18px;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.tab-btn-active {
+  color: #2d5bff;
 }
