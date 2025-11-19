@@ -1,19 +1,48 @@
-import React, { FormEvent, useState } from "react";
-import { Home, Package, FileText, User, LogIn, Loader2, Check } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { Home, Package, FileText, User, LogIn, Loader2, Check, Moon, Sun } from 'lucide-react';
 
 // --- КОНСТАНТЫ ПРИЛОЖЕНИЯ ---
 // Акцентный цвет (Telegram Blue)
 const PRIMARY_COLOR = '#2D5BFF';
+const DANGER_COLOR = '#ef4444'; // Красный
+const SUCCESS_COLOR = '#10b981'; // Зеленый
+
+// Определение цветовых схем для светлой и темной тем
+const LIGHT_THEME = {
+    BACKGROUND: '#f3f4f6',      // Светло-серый фон
+    CARD_BG: 'white',           // Белый фон карточек
+    TEXT: '#1f2937',            // Темный текст
+    SECONDARY_TEXT: '#6b7280',   // Серый вторичный текст
+    BORDER: '#e5e7eb',           // Светлая граница
+    SHADOW: 'rgba(0, 0, 0, 0.1)',
+};
+
+const DARK_THEME = {
+    BACKGROUND: '#1f2937',      // Темный фон (почти черный)
+    CARD_BG: '#374151',           // Темно-серый фон карточек
+    TEXT: 'white',              // Белый текст
+    SECONDARY_TEXT: '#9ca3af',   // Светло-серый вторичный текст
+    BORDER: '#4b5563',           // Темная граница
+    SHADOW: 'rgba(255, 255, 255, 0.1)',
+};
+
+/* ------------------------------------------------------
+        HOOK: usePrefersColorScheme (Проверка системных настроек)
+------------------------------------------------------ */
+const usePrefersColorScheme = () => {
+    // Проверяем, поддерживает ли браузер медиа-запросы prefers-color-scheme
+    if (typeof window !== 'undefined' && window.matchMedia) {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false; // По умолчанию светлая тема, если не можем определить
+};
 
 /* ------------------------------------------------------
         HOOK: useLocalAuth (Имитация аутентификации)
 ------------------------------------------------------ */
 const useLocalAuth = () => {
-    // В чисто клиентском приложении "готовность" наступает сразу.
     const isReady = true; 
-    // Локальная симуляция UID (оставим для внутренней логики, но не для отображения)
     const userId = "LOCAL-SIMULATED-USER-ID"; 
-
     return { userId, isReady };
 };
 
@@ -22,7 +51,6 @@ const useLocalAuth = () => {
         HOOK: useTelegram (упрощено)
 ------------------------------------------------------ */
 const useTelegram = () => {
-    // Используем window.Telegram.WebApp, если доступно
     return { tg: typeof window !== 'undefined' ? window.Telegram?.WebApp : null };
 };
 
@@ -34,43 +62,81 @@ const useTelegram = () => {
 const PrimaryButton = ({ children, loading, ...props }) => (
     <button
         type="submit"
-        className={`w-full py-3 rounded-xl font-semibold text-white transition duration-300 flex items-center justify-center 
-            ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:opacity-90'}`}
-        style={{ backgroundColor: PRIMARY_COLOR, boxShadow: '0 4px 15px rgba(45, 91, 255, 0.4)' }}
+        style={{ 
+            width: '100%', 
+            padding: '12px 0', 
+            borderRadius: '12px', 
+            fontWeight: '600', 
+            color: 'white', 
+            backgroundColor: PRIMARY_COLOR, 
+            transition: 'opacity 0.3s', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            boxShadow: '0 4px 15px rgba(45, 91, 255, 0.4)',
+            opacity: loading ? 0.7 : 1,
+            cursor: loading ? 'not-allowed' : 'pointer'
+        }}
         disabled={loading}
         {...props}
     >
-        {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : children}
+        {loading ? <Loader2 style={{ height: '20px', width: '20px', animation: 'spin 1s linear infinite', marginRight: '8px' }} /> : children}
     </button>
 );
 
 /**
  * ToggleSwitch Component (Бегунок)
  */
-const ToggleSwitch = ({ label, checked, onChange }) => (
-    <label className="flex items-center justify-between text-gray-700 cursor-pointer">
-        <span className="text-sm">{label}</span>
-        <div 
-            onClick={() => onChange(!checked)}
-            className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${
-                checked ? 'bg-[' + PRIMARY_COLOR + ']' : 'bg-gray-300'
-            }`}
-            style={{ backgroundColor: checked ? PRIMARY_COLOR : '#d1d5db' }}
+const ToggleSwitch = ({ label, checked, onChange, icon }) => {
+    const Icon = icon;
+    return (
+        <label 
+            style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                color: 'inherit', // Наследуем цвет текста от родителя (темы)
+                cursor: 'pointer'
+            }}
         >
+            <span style={{ fontSize: '0.875rem', display: 'flex', alignItems: 'center' }}>
+                {Icon && <Icon style={{ height: '18px', width: '18px', marginRight: '8px' }} />}
+                {label}
+            </span>
             <div 
-                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${
-                    checked ? 'translate-x-4' : 'translate-x-0'
-                }`}
-            />
-        </div>
-    </label>
-);
+                onClick={() => onChange(!checked)}
+                style={{ 
+                    width: '44px', 
+                    height: '24px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    borderRadius: '9999px', 
+                    padding: '4px', 
+                    transition: 'background-color 0.3s',
+                    backgroundColor: checked ? PRIMARY_COLOR : '#d1d5db' 
+                }}
+            >
+                <div 
+                    style={{ 
+                        backgroundColor: 'white', 
+                        width: '16px', 
+                        height: '16px', 
+                        borderRadius: '9999px', 
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        transform: checked ? 'translateX(20px)' : 'translateX(0)', 
+                        transition: 'transform 0.3s',
+                    }}
+                />
+            </div>
+        </label>
+    );
+};
 
 
 /**
  * TabBar (Таббар)
  */
-function TabBar({ active, onChange }) {
+function TabBar({ active, onChange, theme }) {
     const items = [
         { id: "home", label: "Главная", Icon: Home },
         { id: "cargo", label: "Грузы", Icon: Package },
@@ -79,19 +145,37 @@ function TabBar({ active, onChange }) {
     ];
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto flex bg-white border-t border-gray-200 shadow-2xl p-2 z-10">
+        <div style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            maxWidth: '448px', 
+            margin: '0 auto',
+            display: 'flex',
+            backgroundColor: theme.CARD_BG,
+            borderTop: `1px solid ${theme.BORDER}`,
+            boxShadow: '0 -10px 20px rgba(0,0,0,0.1)', 
+            padding: '8px',
+            zIndex: 10,
+        }}>
             {items.map((i) => (
                 <div
                     key={i.id}
                     onClick={() => onChange(i.id)}
-                    className={`flex-1 text-center cursor-pointer p-1 transition-colors duration-200 
-                        ${active === i.id 
-                            ? 'text-[' + PRIMARY_COLOR + '] font-bold transform scale-105' 
-                            : 'text-gray-500 hover:text-gray-700'}`
-                    }
+                    style={{
+                        flex: 1,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        transition: 'color 0.2s, transform 0.2s',
+                        color: active === i.id ? PRIMARY_COLOR : theme.SECONDARY_TEXT, 
+                        fontWeight: active === i.id ? 'bold' : 'normal',
+                        transform: active === i.id ? 'scale(1.05)' : 'scale(1)',
+                    }}
                 >
-                    <i.Icon className="h-6 w-6 mx-auto mb-1" />
-                    <div className="text-xs font-medium">{i.label}</div>
+                    <i.Icon style={{ height: '24px', width: '24px', margin: '0 auto 4px' }} />
+                    <div style={{ fontSize: '12px', fontWeight: '500' }}>{i.label}</div>
                 </div>
             ))}
         </div>
@@ -104,6 +188,12 @@ function TabBar({ active, onChange }) {
 function App() {
     const { tg } = useTelegram();
     const { userId, isReady } = useLocalAuth(); 
+    
+    // Инициализация режима на основе системных настроек
+    const prefersDark = usePrefersColorScheme();
+    const [isDarkMode, setIsDarkMode] = useState(prefersDark);
+    
+    const theme = isDarkMode ? DARK_THEME : LIGHT_THEME;
 
     const [login, setLogin] = useState("");
     const [password, setPassword] = useState("");
@@ -112,11 +202,8 @@ function App() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Локальное состояние для хранения авторизационных данных (имитация сессии)
     const [authData, setAuthData] = useState(null); 
     const [activeTab, setActiveTab] = useState("cargo");
-    
-    // В чисто клиентском режиме проверка сессии не нужна
     const sessionChecked = true; 
 
     // Обработчик входа в систему (полностью локальная логика)
@@ -140,11 +227,8 @@ function App() {
 
         try {
             setLoading(true);
-
-            // ИМИТАЦИЯ успешной авторизации 
             await new Promise((res) => setTimeout(res, 500)); 
             
-            // Сохранение данных в локальном состоянии
             setAuthData({ 
                 isLoggedIn: true,
                 login: cleanLogin, 
@@ -165,29 +249,49 @@ function App() {
     ------------------------------------------------------ */
     if (!isReady || !sessionChecked) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-50">
-                <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-                <div className="ml-3 text-gray-600 font-medium">Загрузка...</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: theme.BACKGROUND }}>
+                <Loader2 style={{ height: '32px', width: '32px', color: PRIMARY_COLOR, animation: 'spin 1s linear infinite' }} />
+                <div style={{ marginLeft: '12px', color: theme.SECONDARY_TEXT, fontWeight: '500' }}>Загрузка...</div>
             </div>
         );
     }
 
     if (!authData) {
-        // --- Экран Аутентификации (Улучшенный дизайн с тумблерами) ---
+        // --- Экран Аутентификации ---
         return (
-            <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-                <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-2xl transition duration-500">
-                    <div className="text-center mb-8">
-                        <LogIn className={`h-10 w-10 mx-auto mb-2`} style={{ color: PRIMARY_COLOR }} />
-                        <h1 className="text-4xl font-extrabold" style={{ color: PRIMARY_COLOR }}>HAULZ</h1>
-                        <p className="text-sm text-gray-500 mt-1">Вход в систему для партнеров</p>
+            <div style={{ minHeight: '100vh', backgroundColor: theme.BACKGROUND, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+                <div style={{ 
+                    width: '100%', 
+                    maxWidth: '384px', 
+                    backgroundColor: theme.CARD_BG, 
+                    padding: '32px', 
+                    borderRadius: '24px', 
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                    transition: 'all 0.5s',
+                    color: theme.TEXT // Устанавливаем цвет текста для всего блока
+                }}>
+                    <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                        <LogIn style={{ height: '40px', width: '40px', margin: '0 auto 8px', color: PRIMARY_COLOR }} />
+                        <h1 style={{ fontSize: '36px', fontWeight: '800', color: PRIMARY_COLOR }}>HAULZ</h1>
+                        <p style={{ fontSize: '14px', color: theme.SECONDARY_TEXT, marginTop: '4px' }}>Вход в систему для партнеров</p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         <input
                             placeholder="Email"
                             type="email"
-                            className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-300 focus:border-blue-500 transition duration-200 bg-gray-50 text-gray-800 shadow-inner"
+                            style={{
+                                width: '100%',
+                                padding: '16px',
+                                border: `1px solid ${theme.BORDER}`,
+                                borderRadius: '12px',
+                                transition: 'all 0.2s',
+                                backgroundColor: theme.BACKGROUND,
+                                color: theme.TEXT,
+                                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)',
+                            }}
+                            onFocus={(e) => { e.target.style.border = `1px solid ${PRIMARY_COLOR}`; e.target.style.boxShadow = `0 0 0 3px rgba(45, 91, 255, 0.3)`; }}
+                            onBlur={(e) => { e.target.style.border = `1px solid ${theme.BORDER}`; e.target.style.boxShadow = 'inset 0 1px 2px rgba(0,0,0,0.06)'; }}
                             value={login}
                             onChange={(e) => setLogin(e.target.value)}
                         />
@@ -195,20 +299,29 @@ function App() {
                         <input
                             type="password"
                             placeholder="Пароль"
-                            className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-300 focus:border-blue-500 transition duration-200 bg-gray-50 text-gray-800 shadow-inner"
+                            style={{
+                                width: '100%',
+                                padding: '16px',
+                                border: `1px solid ${theme.BORDER}`,
+                                borderRadius: '12px',
+                                transition: 'all 0.2s',
+                                backgroundColor: theme.BACKGROUND,
+                                color: theme.TEXT,
+                                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)',
+                            }}
+                            onFocus={(e) => { e.target.style.border = `1px solid ${PRIMARY_COLOR}`; e.target.style.boxShadow = `0 0 0 3px rgba(45, 91, 255, 0.3)`; }}
+                            onBlur={(e) => { e.target.style.border = `1px solid ${theme.BORDER}`; e.target.style.boxShadow = 'inset 0 1px 2px rgba(0,0,0,0.06)'; }}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                         />
 
-                        <div className="space-y-4 pt-2">
-                            {/* Заменен чекбокс на тумблер (бегунок) */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingTop: '8px' }}>
                             <ToggleSwitch
                                 label="Согласие с офертой"
                                 checked={agreeOffer}
                                 onChange={setAgreeOffer}
                             />
 
-                            {/* Заменен чекбокс на тумблер (бегунок) */}
                             <ToggleSwitch
                                 label="Обработка персональных данных"
                                 checked={agreePersonal}
@@ -222,7 +335,17 @@ function App() {
                     </form>
 
                     {error && (
-                        <div className="mt-6 p-4 bg-red-50 border border-red-300 text-red-700 rounded-xl text-center text-sm shadow-md">
+                        <div style={{
+                            marginTop: '24px',
+                            padding: '16px',
+                            backgroundColor: '#fee2e2', // bg-red-100
+                            border: `1px solid #fca5a5`, 
+                            color: DANGER_COLOR, 
+                            borderRadius: '12px',
+                            textAlign: 'center',
+                            fontSize: '14px',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        }}>
                             {error}
                         </div>
                     )}
@@ -237,61 +360,101 @@ function App() {
     
     // В зависимости от активной вкладки отображаем содержимое
     const renderContent = () => {
-        const baseCardStyle = "p-6 rounded-2xl shadow-lg mt-4 transition-all duration-300 transform hover:scale-[1.01] flex flex-col items-center text-center";
+        const baseCardStyle = {
+            padding: '24px',
+            borderRadius: '16px',
+            boxShadow: `0 4px 6px -1px ${theme.SHADOW}, 0 2px 4px -1px ${theme.SHADOW}`, 
+            marginTop: '16px',
+            transition: 'all 0.3s',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            backgroundColor: theme.CARD_BG,
+        };
         
         const cardData = {
             home: {
                 title: "Главная страница",
                 desc: "Здесь будет дашборд, ключевые метрики и общая информация.",
                 Icon: Home,
-                style: "bg-white border-b-4 border-gray-300",
+                borderColor: theme.SECONDARY_TEXT, 
             },
             cargo: {
                 title: "Управление грузами",
                 desc: "Рабочая область для создания, редактирования и отслеживания заказов.",
                 Icon: Package,
-                style: `bg-white border-b-4 border-green-500`,
+                borderColor: SUCCESS_COLOR, 
             },
             docs: {
                 title: "Документы",
                 desc: "Электронный документооборот: счета, накладные, акты.",
                 Icon: FileText,
-                style: "bg-white border-b-4 border-yellow-500",
+                borderColor: '#f59e0b', // Желтый
             },
             profile: {
                 title: "Профиль",
                 desc: `Настройки и личные данные пользователя **${authData.login}**.`,
                 Icon: User,
-                style: "bg-white border-b-4 border-indigo-500",
+                borderColor: '#6366f1', // Индиго
             },
         };
 
         const currentCard = cardData[activeTab];
 
         return (
-            <div className={`${baseCardStyle} ${currentCard.style}`}>
-                <currentCard.Icon className={`h-10 w-10 mb-3`} style={{ color: PRIMARY_COLOR }} />
-                <h3 className="text-xl font-bold text-gray-800">{currentCard.title}</h3>
-                <p className="text-gray-600 mt-2 text-sm">{currentCard.desc}</p>
+            <div style={{
+                ...baseCardStyle, 
+                borderBottom: `4px solid ${currentCard.borderColor}`,
+                color: theme.TEXT,
+            }}>
+                <currentCard.Icon style={{ height: '40px', width: '40px', marginBottom: '12px', color: PRIMARY_COLOR }} />
+                <h3 style={{ fontSize: '20px', fontWeight: 'bold', color: theme.TEXT }}>{currentCard.title}</h3>
+                <p style={{ color: theme.SECONDARY_TEXT, marginTop: '8px', fontSize: '14px' }}>{currentCard.desc}</p>
             </div>
         );
     }
     
     return (
-        <div className="p-4 sm:p-6 bg-gray-100 min-h-screen pb-24 max-w-md mx-auto">
-            <header className="text-center mb-8 p-6 bg-white rounded-2xl shadow-xl">
-                <div className="flex items-center justify-center text-green-600 mb-2">
-                    <Check className="h-6 w-6 mr-2" />
-                    <p className="font-semibold text-lg">Авторизация успешна</p>
+        <div style={{ 
+            padding: '16px', 
+            backgroundColor: theme.BACKGROUND, 
+            minHeight: '100vh', 
+            paddingBottom: '96px', 
+            maxWidth: '448px', 
+            margin: '0 auto',
+            transition: 'background-color 0.3s',
+            color: theme.TEXT,
+        }}>
+            <header style={{ textAlign: 'center', marginBottom: '32px', padding: '24px', backgroundColor: theme.CARD_BG, borderRadius: '16px', boxShadow: `0 10px 15px -3px ${theme.SHADOW}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUCCESS_COLOR, marginBottom: '8px' }}>
+                    <Check style={{ height: '24px', width: '24px', marginRight: '8px' }} />
+                    <p style={{ fontWeight: '600', fontSize: '18px' }}>Авторизация успешна</p>
                 </div>
-                <h2 className="text-2xl font-bold text-gray-800">Добро пожаловать, {authData.login}</h2>
+                <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: theme.TEXT }}>Добро пожаловать, {authData.login}</h2>
             </header>
             
+            {/* Тумблер для переключения темы */}
+            <div style={{ 
+                backgroundColor: theme.CARD_BG, 
+                padding: '16px', 
+                borderRadius: '16px', 
+                boxShadow: `0 1px 3px ${theme.SHADOW}`, 
+                marginBottom: '16px'
+            }}>
+                <ToggleSwitch
+                    label={isDarkMode ? "Ночной режим активен" : "Дневной режим активен"}
+                    checked={isDarkMode}
+                    onChange={setIsDarkMode}
+                    icon={isDarkMode ? Moon : Sun}
+                />
+            </div>
+
             {renderContent()}
 
-            <div className="h-4" /> 
+            <div style={{ height: '16px' }} /> 
 
-            <TabBar active={activeTab} onChange={setActiveTab} />
+            <TabBar active={activeTab} onChange={setActiveTab} theme={theme} />
         </div>
     );
 }
