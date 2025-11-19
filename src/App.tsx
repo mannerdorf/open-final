@@ -1,317 +1,293 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
+import { FormEvent, useEffect, useState, useMemo } from "react";
+import { db, auth } from "./firebase";   // ← ВАЖНО: подключаем Firebase ОТСЮДА
 import { 
-    getAuth, 
-    signInAnonymously, 
-    onAuthStateChanged, 
-    signInWithCustomToken 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
 } from 'firebase/auth';
 import { 
-    getFirestore, 
-    doc, 
-    setDoc, 
-    serverTimestamp,
-    setLogLevel
+  doc, 
+  setDoc, 
+  getDoc 
 } from 'firebase/firestore';
-import { Truck, Package, User, CheckCircle, XCircle, Loader2, Route } from 'lucide-react';
 
-// Устанавливаем уровень логирования для Firebase (полезно для отладки)
-setLogLevel('debug');
+/* ------------------------------------------------------
+                КОНСТАНТЫ FIREBASE
+------------------------------------------------------ */
 
-// --- КОНФИГУРАЦИЯ FIREBASE (ИСПОЛЬЗУЕТСЯ, ЕСЛИ ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ ОТСУТСТВУЕТ) ---
-// Взято из предоставленных вами изображений проекта "mini-app-3e9e3".
-const FALLBACK_FIREBASE_CONFIG = {
-    apiKey: "AIzaSyC4S6zE51eW3KD663R693NR_L21x_af7KjTk",
-    authDomain: "mini-app-3e9e3.firebaseapp.com",
-    projectId: "mini-app-3e9e3",
-    storageBucket: "mini-app-3e9e3.appspot.com",
-    messagingSenderId: "91549594192",
-    appId: "1:91549594192:web:d66c355bc4f87f59c1755",
-    measurementId: "G-F9FN4T5RYL" 
-};
+// Данные из Telegram initData (если есть)
+const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+const appId = rawAppId.split('/')[0]; 
+
+const SESSION_COLLECTION = 'sessions';
+const SESSION_DOCUMENT = 'current_session';
 
 
-// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СРЕДЫ CANVAS (ОБЯЗАТЕЛЬНЫЕ) ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+/* ------------------------------------------------------
+                HOOK: Firebase Auth
+------------------------------------------------------ */
+const useFirebaseAuth = () => {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
-// ИСХОДНАЯ ПРОБЛЕМА РЕШЕНА:
-// Если __firebase_config отсутствует, используем FALLBACK_FIREBASE_CONFIG.
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-    ? JSON.parse(__firebase_config) 
-    : FALLBACK_FIREBASE_CONFIG; 
+  useEffect(() => {
+    const a = auth;
 
-// --- КОНСТАНТЫ ПРИЛОЖЕНИЯ ---
-const SHIPMENTS_COLLECTION = 'shipments'; // Коллекция для хранения данных о грузах
-const PATH_PREFIX = `/artifacts/${appId}/users`; // Путь для приватных данных пользователя
+    const unsubscribe = onAuthStateChanged(a, (user) => {
+      if (user) setUserId(user.uid);
+      else setUserId(null);
 
-// Компонент для отображения критических ошибок
-const ErrorBox = ({ title, message }) => (
-    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-6 rounded-xl shadow-lg m-4 max-w-lg mx-auto mt-12">
-        <div className="flex items-center mb-2">
-            <XCircle className="h-6 w-6 mr-3 flex-shrink-0" />
-            <p className="font-bold text-xl">{title}</p>
-        </div>
-        <p className="mt-2 text-sm">{message}</p>
-        <p className="mt-4 text-xs italic opacity-80">
-            Проверьте консоль для получения подробной информации.
-        </p>
-    </div>
-);
+      setIsReady(true);
+    });
 
-// Компонент для отображения статуса инициализации
-const StatusPill = ({ status }) => {
-    let style = '';
-    let text = '';
-    let Icon = null;
-
-    if (status === 'ready') {
-        style = 'bg-green-100 text-green-700 border-green-300';
-        text = 'Готов к работе';
-        Icon = CheckCircle;
-    } else if (status === 'loading') {
-        style = 'bg-blue-100 text-blue-700 border-blue-300';
-        text = 'Загрузка...';
-        Icon = Loader2;
-    } else {
-        style = 'bg-red-100 text-red-700 border-red-300';
-        text = 'Ошибка';
-        Icon = XCircle;
-    }
-
-    return (
-        <span className={`inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full border ${style}`}>
-            {Icon && <Icon className={`h-4 w-4 mr-2 ${status === 'loading' ? 'animate-spin' : ''}`} />}
-            {text}
-        </span>
-    );
-};
-
-// --- ГЛАВНЫЙ КОМПОНЕНТ ПРИЛОЖЕНИЯ ---
-const App = () => {
-    // Состояние для Firebase
-    const [db, setDb] = useState(null);
-    const [auth, setAuth] = useState(null);
-    const [userId, setUserId] = useState(null);
-    
-    // Состояние для UI
-    const [authStatus, setAuthStatus] = useState('loading');
-    const [error, setError] = useState(null);
-    const [localMessage, setLocalMessage] = useState(null); // Для сообщений пользователю
-    const [shipments, setShipments] = useState([]); // Для данных приложения HAULZ
-
-    // 1. Инициализация Firebase и Аутентификация
-    useEffect(() => {
-        // Проверка конфигурации (теперь с FALLBACK)
-        if (!firebaseConfig || !firebaseConfig.apiKey) {
-            // Если даже FALLBACK не сработал (чего быть не должно)
-            setError("Критическая ошибка: Конфигурация Firebase не найдена или недействительна.");
-            setAuthStatus('error');
-            return;
+    // Входим анонимно (или по токену)
+    const start = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(a, __initial_auth_token);
+        } else {
+          await signInAnonymously(a);
         }
-
-        try {
-            const firebaseApp = initializeApp(firebaseConfig);
-            const authInstance = getAuth(firebaseApp);
-            const dbInstance = getFirestore(firebaseApp);
-            
-            setDb(dbInstance);
-            setAuth(authInstance);
-
-            // Аутентификация: попытка входа с токеном или анонимно
-            const authenticateUser = async () => {
-                try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(authInstance, initialAuthToken);
-                    } else {
-                        // Убедитесь, что Anonymous Sign-in включен в настройках Firebase!
-                        await signInAnonymously(authInstance); 
-                    }
-                } catch (e) {
-                    setError(`Ошибка аутентификации Firebase (${e.code}): ${e.message}`);
-                    setAuthStatus('error');
-                }
-            };
-
-            // Слушатель состояния аутентификации
-            const unsubscribe = onAuthStateChanged(authInstance, (user) => {
-                if (user) {
-                    setUserId(user.uid);
-                    setAuthStatus('ready');
-                } else {
-                    setUserId(null);
-                    setAuthStatus('loading');
-                    // Если пользователь вышел, пытаемся войти снова
-                    authenticateUser();
-                }
-            });
-
-            return () => unsubscribe(); // Очистка слушателя
-
-        } catch (e) {
-            console.error("Ошибка при инициализации Firebase:", e);
-            setError(`Ошибка инициализации Firebase: ${e.message}`);
-            setAuthStatus('error');
-        }
-    }, []);
-
-    // 2. Логика приложения: добавление тестового груза (пример)
-    const addTestShipment = async () => {
-        if (!db || !userId) {
-            console.error("Firebase не готов.");
-            setLocalMessage({ type: 'error', text: 'Система не готова. Подождите завершения аутентификации.' });
-            return;
-        }
-
-        const newShipment = {
-            id: Date.now().toString(),
-            from: "Москва",
-            to: "Санкт-Петербург",
-            status: "Pending",
-            weight: Math.floor(Math.random() * 500) + 50,
-            timestamp: serverTimestamp(),
-            driver: `Driver-${userId.substring(0, 4)}`,
-        };
-
-        // Путь для приватных данных: /artifacts/{appId}/users/{userId}/shipments/{docId}
-        const docRef = doc(db, PATH_PREFIX, userId, SHIPMENTS_COLLECTION, newShipment.id);
-        
-        try {
-            await setDoc(docRef, newShipment);
-            console.log("Тестовый груз добавлен:", newShipment.id);
-            setShipments(prev => [...prev, newShipment]);
-            setLocalMessage({ type: 'success', text: `Груз #${newShipment.id.slice(-4)} успешно добавлен!` });
-            setTimeout(() => setLocalMessage(null), 5000);
-        } catch (e) {
-            console.error("Ошибка при добавлении груза:", e);
-            setLocalMessage({ type: 'error', text: `Не удалось добавить груз: ${e.message}. Проверьте правила безопасности Firestore.` });
-        }
+      } catch (e) {
+        console.error("AUTH ERROR:", e);
+      }
     };
 
-    // --- РЕНДЕРИНГ UI ---
+    start();
+    return () => unsubscribe();
+  }, []);
 
-    if (error) {
-        // Отображение ErrorBox, если есть критическая ошибка
-        return <ErrorBox title="Ошибка Инициализации/Аутентификации" message={error} />;
-    }
-
-    if (authStatus === 'loading') {
-        // Явный экран загрузки
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
-                <div className="text-center p-8 bg-white rounded-xl shadow-2xl border-t-4 border-blue-500">
-                    <Loader2 className="h-10 w-10 text-blue-500 animate-spin mx-auto mb-4" />
-                    <p className="text-xl font-semibold text-gray-700">Загрузка приложения и подключение к Firebase...</p>
-                    <p className="text-sm text-gray-500 mt-2">Пожалуйста, подождите. Для работы требуется анонимная аутентификация.</p>
-                </div>
-            </div>
-        );
-    }
-
-    const isReady = authStatus === 'ready' && db !== null;
-
-    return (
-        <div className="p-4 sm:p-8 max-w-5xl mx-auto bg-gray-50 min-h-screen font-sans">
-            <header className="text-center mb-8 border-b pb-4 bg-white p-4 rounded-xl shadow-md">
-                <div className="flex justify-center items-center mb-2">
-                    <Truck className="h-8 w-8 text-blue-600 mr-3" />
-                    <h1 className="text-3xl font-extrabold text-gray-900">
-                        HAULZ - Система Управления Грузами
-                    </h1>
-                </div>
-                <p className="text-gray-600">Основа на React и Firebase/Firestore</p>
-            </header>
-            
-            {/* БЛОК СООБЩЕНИЙ */}
-            {localMessage && (
-                <div className={`p-4 mb-6 rounded-lg shadow-md ${localMessage.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-green-100 text-green-800 border border-green-300'}`}>
-                    <div className="flex justify-between items-center">
-                        <p className="font-medium">{localMessage.text}</p>
-                        <button onClick={() => setLocalMessage(null)} className="text-lg font-bold ml-4">
-                            &times;
-                        </button>
-                    </div>
-                </div>
-            )}
-
-
-            {/* БЛОК СТАТУСА */}
-            <div className="mb-8 p-5 border border-indigo-200 bg-indigo-50 rounded-xl shadow-lg">
-                <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-indigo-700 flex items-center">
-                        <User className="h-5 w-5 mr-2" />
-                        Статус Пользователя
-                    </h2>
-                    <StatusPill status={authStatus} />
-                </div>
-                <p className="mt-3 text-sm text-gray-700 break-all">
-                    <span className="font-semibold">UID:</span> 
-                    <code className="ml-2 bg-indigo-100 text-indigo-800 p-1 rounded font-mono">
-                        {userId || 'Аутентификация...'}
-                    </code>
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                    Это ваш уникальный идентификатор в системе Firebase.
-                </p>
-            </div>
-            
-            {/* БЛОК ПРИЛОЖЕНИЯ */}
-            <div className="p-6 bg-white rounded-xl shadow-2xl">
-                <h2 className="text-2xl font-bold text-gray-800 border-b pb-2 mb-4 flex items-center">
-                    <Route className="h-6 w-6 mr-3 text-blue-600" />
-                    Управление Грузами (Прототип)
-                </h2>
-                
-                <div className="flex justify-center mb-6">
-                    <button 
-                        className={`flex items-center px-6 py-3 rounded-full font-bold transition duration-300 shadow-lg ${isReady ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'}`}
-                        onClick={addTestShipment}
-                        disabled={!isReady}
-                    >
-                        {isReady ? (
-                            <><Package className="h-5 w-5 mr-2" /> Добавить Тестовый Груз</>
-                        ) : (
-                            <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Ожидание Firebase...</>
-                        )}
-                    </button>
-                </div>
-
-                {/* Список тестовых грузов */}
-                <h3 className="text-xl font-semibold text-gray-700 mt-8 mb-3">
-                    Тестовые Грузы ({shipments.length})
-                </h3>
-                
-                {shipments.length === 0 ? (
-                    <div className="text-center p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                        <Package className="h-10 w-10 text-gray-400 mx-auto mb-3" />
-                        <p className="text-gray-500">Грузы не добавлены. Нажмите кнопку выше, чтобы добавить первый тестовый груз.</p>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {shipments.map((shipment, index) => (
-                            <div key={shipment.id} className="p-4 border border-gray-200 rounded-lg bg-white hover:shadow-sm transition duration-150">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="text-lg font-semibold text-gray-900">
-                                            {shipment.from} → {shipment.to}
-                                        </p>
-                                        <p className="text-sm text-gray-500">
-                                            Водитель: {shipment.driver} | Вес: {shipment.weight} кг
-                                        </p>
-                                    </div>
-                                    <span className="px-3 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                                        {shipment.status}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-                
-            </div>
-            
-        </div>
-    );
+  return { userId, isReady };
 };
+
+
+/* ------------------------------------------------------
+                useTelegram HOOK
+------------------------------------------------------ */
+declare global {
+  interface Window {
+    Telegram: any;
+  }
+}
+
+const useTelegram = () => {
+  return { tg: window.Telegram?.WebApp };
+};
+
+
+/* ------------------------------------------------------
+                App Component
+------------------------------------------------------ */
+function App() {
+  const { tg } = useTelegram();
+  const { userId, isReady } = useFirebaseAuth();
+
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+  const [agreeOffer, setAgreeOffer] = useState(false);
+  const [agreePersonal, setAgreePersonal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [authData, setAuthData] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("cargo");
+
+  const [sessionChecked, setSessionChecked] = useState(false);
+
+  const getSessionRef = (uid: string) =>
+    doc(db, "artifacts", appId, "users", uid, SESSION_COLLECTION, SESSION_DOCUMENT);
+
+  useEffect(() => {
+    if (!isReady || !userId) return;
+
+    const load = async () => {
+      try {
+        const ref = getSessionRef(userId);
+        const snap = await getDoc(ref);
+
+        if (snap.exists() && snap.data().isLoggedIn) {
+          setAuthData({ login: snap.data().login });
+        }
+      } catch (e) {
+        console.log("Session check error:", e);
+      }
+
+      setSessionChecked(true);
+    };
+
+    load();
+  }, [isReady, userId]);
+
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+
+    setError(null);
+
+    const cleanLogin = login.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanLogin || !cleanPassword) {
+      setError("Введите логин и пароль");
+      return;
+    }
+
+    if (!agreeOffer || !agreePersonal) {
+      setError("Необходимо согласие");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // ИМИТАЦИЯ успешной авторизации
+      await new Promise((res) => setTimeout(res, 500));
+
+      if (userId) {
+        await setDoc(getSessionRef(userId), {
+          isLoggedIn: true,
+          login: cleanLogin,
+          ts: Date.now()
+        });
+      }
+
+      setAuthData({ login: cleanLogin });
+      setActiveTab("cargo");
+    } catch (err: any) {
+      setError("Ошибка авторизации");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  /* ------------------------------------------------------
+                  Рендер
+  ------------------------------------------------------ */
+  if (!isReady || !sessionChecked) {
+    return <div style={{ padding: 30 }}>Загрузка...</div>;
+  }
+
+  if (!authData) {
+    return (
+      <div style={{ padding: 30, maxWidth: 400, margin: "0 auto" }}>
+        <h1 style={{ textAlign: "center", color: "#2D5BFF" }}>HAULZ</h1>
+        <p style={{ textAlign: "center", opacity: 0.6 }}>
+          Доставка грузов в Калининград
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <input
+            placeholder="Email"
+            className="tg-input"
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
+            style={{ width: "100%", marginBottom: 12 }}
+          />
+
+          <input
+            type="password"
+            placeholder="Пароль"
+            className="tg-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ width: "100%", marginBottom: 12 }}
+          />
+
+          <label>
+            <input
+              type="checkbox"
+              checked={agreeOffer}
+              onChange={(e) => setAgreeOffer(e.target.checked)}
+            />{" "}
+            Согласие с офертой
+          </label>
+
+          <br />
+
+          <label>
+            <input
+              type="checkbox"
+              checked={agreePersonal}
+              onChange={(e) => setAgreePersonal(e.target.checked)}
+            />{" "}
+            Персональные данные
+          </label>
+
+          <button
+            type="submit"
+            className="tg-main-button"
+            style={{ marginTop: 20, width: "100%" }}
+          >
+            {loading ? "..." : "Войти"}
+          </button>
+        </form>
+
+        {error && (
+          <div style={{ marginTop: 20, color: "red", textAlign: "center" }}>
+            {error}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ------------------------------------------------------
+              АВТОРИЗОВАННЫЙ ИНТЕРФЕЙС
+  ------------------------------------------------------ */
+  return (
+    <div style={{ padding: 20 }}>
+      <h2>Добро пожаловать, {authData.login}</h2>
+      <p>Выберите вкладку снизу</p>
+
+      <div style={{ height: 300 }} />
+
+      <TabBar active={activeTab} onChange={setActiveTab} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------
+              Таббар (как у тебя)
+------------------------------------------------------ */
+function TabBar({ active, onChange }: any) {
+  const items = [
+    { id: "home", label: "Главная", icon: "🏠" },
+    { id: "cargo", label: "Грузы", icon: "📦" },
+    { id: "docs", label: "Документы", icon: "📄" },
+    { id: "profile", label: "Профиль", icon: "👤" },
+  ];
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        display: "flex",
+        background: "#fff",
+        borderTop: "1px solid #eee",
+        padding: "10px 0"
+      }}
+    >
+      {items.map((i) => (
+        <div
+          key={i.id}
+          onClick={() => onChange(i.id)}
+          style={{
+            flex: 1,
+            textAlign: "center",
+            color: active === i.id ? "#2D5BFF" : "#999"
+          }}
+        >
+          <div>{i.icon}</div>
+          <div style={{ fontSize: 12 }}>{i.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default App;
