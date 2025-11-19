@@ -19,9 +19,20 @@ import {
   orderBy
 } from 'firebase/firestore';
 
+// Hardcoded Firebase Config loaded from the user's uploaded image (image_b100bd.jpg)
+// The error was caused by the environment variable __firebase_config not being available.
+const firebaseConfig = {
+    apiKey: "AIzaSyC6zS1Ew3KD663R693NR_L21x_aF7KTk",
+    authDomain: "mini-app-3e9e3.firebaseapp.com",
+    projectId: "mini-app-3e9e3",
+    storageBucket: "mini-app-3e9e3.appspot.com",
+    messagingSenderId: "91549594192",
+    appId: "1:91549594192:web:d65c3555bc4f87f59c1755",
+    measurementId: "G-F9FN4T5RYL"
+};
+
 // Mandatory Global Variables provided by the Canvas Environment
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
 // The main application component
@@ -37,14 +48,10 @@ export default function App() {
   // 1. Firebase Initialization and Authentication
   useEffect(() => {
     // Enable debug logging for Firebase
-    // NOTE: setLogLevel is imported from 'firebase/firestore'
     setLogLevel('debug');
 
     try {
-      if (!Object.keys(firebaseConfig).length) {
-        throw new Error("Firebase configuration is missing. Check your .env setup.");
-      }
-
+      // The configuration is now hardcoded, so we skip the check for empty config.
       const app = initializeApp(firebaseConfig);
       const firestoreDb = getFirestore(app);
       const firebaseAuth = getAuth(app);
@@ -79,6 +86,7 @@ export default function App() {
       return () => unsubscribeAuth();
     } catch (e) {
       console.error("Firebase Init Error:", e);
+      // Removed the custom error check and replaced it with a generic error
       setError("Ошибка инициализации Firebase: " + e.message);
       setLoading(false);
     }
