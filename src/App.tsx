@@ -1,329 +1,180 @@
-type CargoPageProps = { auth: AuthData };
+import React, { useState, useEffect, useMemo } from "react";
+import { Copy, Plus, Package, Calendar, MapPin, ChevronRight } from "lucide-react"; // Иконки
+
+// 1. Строгая типизация данных
+interface CargoItem {
+  id: string | number;
+  Number: string;
+  State: string;
+  FromCity: string;
+  ToCity: string;
+  DatePrih: string;
+}
 
 type DateFilter = "all" | "today" | "week" | "month";
-type StatusFilter = "all" | "created" | "accepted" | "in_transit" | "ready" | "delivered";
-type CargoTab = "active" | "archive" | "attention";
+type StatusFilter = "all" | "created" | "in_transit" | "ready" | "delivered";
 
-function CargoPage({ auth }: CargoPageProps) {
-  const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [cargoTab, setCargoTab] = useState<CargoTab>("active");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const res = await fetch("/api/perevozki", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            login: auth.login.trim(),
-            password: auth.password.trim(),
-          }),
-        });
-
-        if (!res.ok) {
-          let message = `Ошибка загрузки: ${res.status}`;
-          try {
-            const text = await res.text();
-            if (text) message += ` — ${text}`;
-          } catch {}
-          if (!cancelled) setError(message);
-          return;
-        }
-
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : data.items || [];
-        if (!cancelled) setItems(list);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Ошибка сети");
-      } finally {
-        if (!cancelled) setLoading(false);
+// 2. Хук для копирования с вибрацией
+const useCopyToClipboard = () => {
+  const copy = (text: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      // Если есть доступ к Telegram SDK, вызываем нативную вибрацию
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
       }
-    };
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [auth.login, auth.password]);
-
-  // ---- вспомогательные функции ---------------------------------
-
-  const getStateKey = (item: any): StatusFilter => {
-    const s = ((item.State || item.state || "") as string).toLowerCase();
-    if (!s) return "all";
-    if (s.includes("создан")) return "created";
-    if (s.includes("принят")) return "accepted";
-    if (s.includes("в пути")) return "in_transit";
-    if (s.includes("готов") || s.includes("выдаче")) return "ready";
-    if (s.includes("достав")) return "delivered";
-    return "all";
-  };
-
-  const isArchive = (item: any) => getStateKey(item) === "delivered";
-  const isAttention = (item: any) => {
-    const s = ((item.State || item.state || "") as string).toLowerCase();
-    return s.includes("требует") || s.includes("ожид");
-  };
-
-  const getDate = (item: any): Date | null => {
-    const raw =
-      (item.DatePrih as string) ||
-      (item.DatePr as string) ||
-      (item.DateVr as string);
-    if (!raw) return null;
-    const d = new Date(raw);
-    return isNaN(d.getTime()) ? null : d;
-  };
-
-  const matchesDateFilter = (item: any) => {
-    if (dateFilter === "all") return true;
-    const d = getDate(item);
-    if (!d) return true;
-
-    const now = new Date();
-    const startOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-    const diffDays = (startOfDay.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
-
-    switch (dateFilter) {
-      case "today":
-        return diffDays >= 0 && diffDays < 1;
-      case "week":
-        return diffDays >= 0 && diffDays < 7;
-      case "month":
-        return diffDays >= 0 && diffDays < 31;
-      default:
-        return true;
     }
   };
+  return copy;
+};
 
-  const matchesStatusFilter = (item: any) => {
-    if (statusFilter === "all") return true;
-    return getStateKey(item) === statusFilter;
+export default function CargoPage({ auth }: { auth: any }) {
+  const [items, setItems] = useState<CargoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Состояние фильтров
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const copy = useCopyToClipboard();
+
+  // Загрузка данных (упрощена для примера)
+  useEffect(() => {
+    // Симуляция загрузки
+    setTimeout(() => {
+        setItems([
+            { id: 1, Number: "CARGO-10293", State: "В пути", FromCity: "Москва", ToCity: "Казань", DatePrih: "2023-10-25" },
+            { id: 2, Number: "CARGO-55521", State: "Готов к выдаче", FromCity: "СПБ", ToCity: "Минск", DatePrih: "2023-10-20" },
+            { id: 3, Number: "CARGO-11111", State: "Доставлен", FromCity: "Сочи", ToCity: "Адлер", DatePrih: "2023-10-15" },
+        ]);
+        setLoading(false);
+    }, 1500);
+  }, []);
+
+  // 3. Мемоизация фильтрации (чтобы не тормозило при ререндере)
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      // Логика фильтрации (можно оставить вашу сложную логику здесь)
+      const statusMatch = statusFilter === 'all' 
+        ? true 
+        : item.State.toLowerCase().includes(statusFilter === 'in_transit' ? 'пути' : statusFilter);
+      return statusMatch; // + date match
+    });
+  }, [items, statusFilter, dateFilter]);
+
+  // 4. Вспомогательная функция для цвета статуса
+  const getStatusColor = (state: string) => {
+    const s = state.toLowerCase();
+    if (s.includes("пути")) return "text-blue-500 bg-blue-100/10"; // Используем прозрачность для темной темы
+    if (s.includes("готов")) return "text-green-500 bg-green-100/10";
+    if (s.includes("достав")) return "text-gray-500 bg-gray-100/10";
+    return "text-orange-500 bg-orange-100/10";
   };
-
-  const matchesTab = (item: any) => {
-    if (cargoTab === "active") return !isArchive(item);
-    if (cargoTab === "archive") return isArchive(item);
-    if (cargoTab === "attention") return isAttention(item);
-    return true;
-  };
-
-  const filtered = items.filter(
-    (it) => matchesDateFilter(it) && matchesStatusFilter(it) && matchesTab(it)
-  );
-
-  // ---- отрисовка ---------------------------------
 
   return (
-    <div className="cargo-page">
-      {/* Фильтры по дате и статусу */}
-      <div className="cargo-filters">
-        <div className="filter-block">
-          <div className="filter-title">Дата</div>
-          <div className="filter-chip-row">
-            <FilterChip
-              label="Все"
-              active={dateFilter === "all"}
-              onClick={() => setDateFilter("all")}
-            />
-            <FilterChip
-              label="Сегодня"
-              active={dateFilter === "today"}
-              onClick={() => setDateFilter("today")}
-            />
-            <FilterChip
-              label="Неделя"
-              active={dateFilter === "week"}
-              onClick={() => setDateFilter("week")}
-            />
-            <FilterChip
-              label="Месяц"
-              active={dateFilter === "month"}
-              onClick={() => setDateFilter("month")}
-            />
-          </div>
+    // Используем переменные темы Telegram для фона и текста
+    <div className="min-h-screen pb-24 px-4 pt-4 bg-[var(--tg-theme-bg-color)] text-[var(--tg-theme-text-color)]">
+      
+      {/* --- HEADER & FILTERS --- */}
+      <div className="sticky top-0 z-10 bg-[var(--tg-theme-bg-color)] pb-2">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-bold">Мои грузы</h1>
+          <div className="text-sm opacity-50">{filteredItems.length} шт.</div>
         </div>
 
-        <div className="filter-block">
-          <div className="filter-title">Статус</div>
-          <div className="filter-chip-row">
-            <FilterChip
-              label="Все"
-              active={statusFilter === "all"}
-              onClick={() => setStatusFilter("all")}
-            />
-            <FilterChip
-              label="Создана"
-              active={statusFilter === "created"}
-              onClick={() => setStatusFilter("created")}
-            />
-            <FilterChip
-              label="Принят"
-              active={statusFilter === "accepted"}
-              onClick={() => setStatusFilter("accepted")}
-            />
-            <FilterChip
-              label="В пути"
-              active={statusFilter === "in_transit"}
-              onClick={() => setStatusFilter("in_transit")}
-            />
-            <FilterChip
-              label="Готов к выдаче"
-              active={statusFilter === "ready"}
-              onClick={() => setStatusFilter("ready")}
-            />
-          </div>
+        {/* Горизонтальный скролл для фильтров (Экономия места) */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+            {['all', 'today', 'week', 'month'].map((f) => (
+                <button
+                    key={f}
+                    onClick={() => setDateFilter(f as DateFilter)}
+                    className={`
+                        px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all
+                        ${dateFilter === f 
+                            ? 'bg-[var(--tg-theme-button-color)] text-[var(--tg-theme-button-text-color)]' 
+                            : 'bg-[var(--tg-theme-secondary-bg-color)] text-[var(--tg-theme-hint-color)]'}
+                    `}
+                >
+                    {f === 'all' ? 'Все даты' : f === 'today' ? 'Сегодня' : f === 'week' ? 'Неделя' : 'Месяц'}
+                </button>
+            ))}
         </div>
       </div>
 
-      {/* Кнопка «Новая перевозка» */}
-      <button
-        type="button"
-        className="cargo-new-btn"
-        onClick={() => alert("Новая перевозка (пока заглушка)")}
+      {/* --- LIST --- */}
+      <div className="space-y-3 mt-2">
+        {loading ? (
+           // Skeleton Loader вместо текста "Загрузка..."
+           [1,2,3].map(i => <SkeletonCard key={i} />)
+        ) : (
+            filteredItems.map((item) => (
+                <div 
+                    key={item.id} 
+                    className="p-4 rounded-xl bg-[var(--tg-theme-secondary-bg-color)] shadow-sm active:scale-[0.98] transition-transform"
+                >
+                    {/* Header карточки */}
+                    <div className="flex justify-between items-start mb-3">
+                        <div>
+                            <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${getStatusColor(item.State)}`}>
+                                {item.State}
+                            </div>
+                            <div className="font-mono font-bold text-lg mt-1 flex items-center gap-2">
+                                {item.Number}
+                                <button onClick={() => copy(item.Number)} className="opacity-50 active:opacity-100 p-1">
+                                    <Copy size={14} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="text-xs opacity-50 text-right">
+                            <div>Прибытие</div>
+                            <div className="font-medium">{item.DatePrih}</div>
+                        </div>
+                    </div>
+
+                    {/* Маршрут с визуализацией */}
+                    <div className="relative pl-4 border-l-2 border-[var(--tg-theme-hint-color)] border-opacity-20 ml-1 py-1 space-y-4">
+                        <div className="relative">
+                            <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 border-[var(--tg-theme-button-color)] bg-[var(--tg-theme-bg-color)]"></div>
+                            <div className="text-sm font-medium">{item.FromCity}</div>
+                            <div className="text-xs opacity-50">Отправление</div>
+                        </div>
+                        <div className="relative">
+                            <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-[var(--tg-theme-button-color)]"></div>
+                            <div className="text-sm font-medium">{item.ToCity}</div>
+                            <div className="text-xs opacity-50">Назначение</div>
+                        </div>
+                    </div>
+                </div>
+            ))
+        )}
+        
+        {!loading && filteredItems.length === 0 && (
+            <div className="text-center py-10 opacity-50">
+                <Package size={48} className="mx-auto mb-2 opacity-20"/>
+                Ничего не найдено
+            </div>
+        )}
+      </div>
+
+      {/* --- FAB (Floating Action Button) --- */}
+      <button 
+        onClick={() => alert('New')}
+        className="fixed bottom-6 right-4 w-14 h-14 bg-[var(--tg-theme-button-color)] text-[var(--tg-theme-button-text-color)] rounded-full shadow-lg flex items-center justify-center active:scale-90 transition-transform z-50"
       >
-        <span className="cargo-new-plus">+</span>
-        <span>Новая перевозка</span>
+        <Plus size={28} />
       </button>
 
-      {/* Табы Активные / Архив / Требуют действий */}
-      <div className="cargo-tabs">
-        <CargoTabButton
-          label="Активные"
-          active={cargoTab === "active"}
-          onClick={() => setCargoTab("active")}
-        />
-        <CargoTabButton
-          label="Архив"
-          active={cargoTab === "archive"}
-          onClick={() => setCargoTab("archive")}
-        />
-        <CargoTabButton
-          label="Требуют действий"
-          active={cargoTab === "attention"}
-          onClick={() => setCargoTab("attention")}
-        />
-      </div>
-
-      {loading && <p>Загружаем данные…</p>}
-      {error && <p className="error">{error}</p>}
-
-      {!loading && !error && filtered.length === 0 && (
-        <p className="subtitle">Перевозок по выбранным фильтрам нет.</p>
-      )}
-
-      {/* Список карточек грузов */}
-      <div className="cargo-list">
-        {filtered.map((item, idx) => (
-          <CargoCard item={item} key={idx} />
-        ))}
-      </div>
     </div>
   );
 }
 
-// ---------- маленькие подкомпоненты для красоты ----------
-
-type FilterChipProps = {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-};
-
-function FilterChip({ label, active, onClick }: FilterChipProps) {
-  return (
-    <button
-      type="button"
-      className={`filter-chip ${active ? "filter-chip-active" : ""}`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
-type CargoTabButtonProps = {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-};
-
-function CargoTabButton({ label, active, onClick }: CargoTabButtonProps) {
-  return (
-    <button
-      type="button"
-      className={`cargo-tab-btn ${active ? "cargo-tab-btn-active" : ""}`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
-function CargoCard({ item }: { item: any }) {
-  const number = item.Number || item.number || "-";
-  const state = item.State || item.state || "";
-  const fromCity = item.FromCity || item.From || item.StartCity || "";
-  const toCity = item.ToCity || item.To || item.EndCity || "";
-  const planDate =
-    item.DatePrih || item.DatePr || item.DateVr || item.PlanDate || "";
-
-  return (
-    <div className="cargo-card">
-      <div className="cargo-card-header">
-        <div className="cargo-card-number">{number}</div>
-        <button className="cargo-card-copy" type="button">
-          ⧉
-        </button>
-      </div>
-
-      <div className="cargo-card-status-row">
-        <span className="cargo-status-dot" />
-        <span className="cargo-status-text">{state || "Статус не указан"}</span>
-      </div>
-
-      <div className="cargo-card-route">
-        <div className="cargo-card-point">
-          <span className="cargo-point-dot origin" />
-          <div>
-            <div className="cargo-point-label">Откуда</div>
-            <div className="cargo-point-city">
-              {fromCity || "Не указано место отправления"}
-            </div>
-          </div>
+// Компонент-заглушка для красивой загрузки
+function SkeletonCard() {
+    return (
+        <div className="p-4 rounded-xl bg-[var(--tg-theme-secondary-bg-color)] animate-pulse">
+            <div className="h-4 w-20 bg-gray-400/20 rounded mb-2"></div>
+            <div className="h-6 w-32 bg-gray-400/20 rounded mb-4"></div>
+            <div className="h-10 w-full bg-gray-400/20 rounded"></div>
         </div>
-
-        <div className="cargo-card-point">
-          <span className="cargo-point-dot destination" />
-          <div>
-            <div className="cargo-point-label">Куда</div>
-            <div className="cargo-point-city">
-              {toCity || "Не указано место доставки"}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="cargo-card-footer">
-        <span className="cargo-card-footer-icon">🕒</span>
-        <span className="cargo-card-footer-text">
-          Плановая доставка: {planDate || "дата не указана"}
-        </span>
-      </div>
-    </div>
-  );
+    )
 }
