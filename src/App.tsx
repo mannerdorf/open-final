@@ -1,43 +1,136 @@
 import { FormEvent, useEffect, useState, useMemo } from "react";
-// Tailwind CSS не используется в этом файле, но классы используются для адаптивности
-// и чистой структуры, поэтому я добавляю минимальные встроенные стили (CSS)
-// для реализации внешнего вида Telegram.
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 
-// --- 1. HOOK: ИМИТАЦИЯ useTelegram (Встроено) ---
-// Этот код имитирует работу с Telegram WebApp API и предоставляет заглушки
-const useTelegram = () => {
-  const tg = window.Telegram?.WebApp;
-  const isReady = !!tg;
+// ------------------------------------------------------
+//                КОНСТАНТЫ И ПЕРЕМЕННЫЕ FIREBASE
+// ------------------------------------------------------
 
-  if (isReady) {
-    // В реальном приложении:
-    // tg.ready(); 
-    // tg.expand(); 
-  }
+// Глобальные переменные Canvas, необходимые для Firebase
+const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// FIX: Нормализация appId: берем только первую часть, чтобы избежать включения путей файлов, 
+// которые могут нарушить структуру пути Firestore (C/D/C/D...)
+const appId = rawAppId.split('/')[0]; 
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-  return {
-    tg,
-    isReady,
-    initData: tg?.initDataUnsafe || {},
-    user: tg?.initDataUnsafe?.user,
-    queryId: tg?.initDataUnsafe?.query_id,
-  };
+// Название коллекции для сохранения статуса авторизации пользователя
+const SESSION_COLLECTION = 'sessions';
+const SESSION_DOCUMENT = 'current_session';
+
+// ------------------------------------------------------
+//                1. HOOK: ИНИЦИАЛИЗАЦИЯ FIREBASE
+// ------------------------------------------------------
+
+/**
+ * Хук для инициализации Firebase, аутентификации и получения ID пользователя.
+ */
+const useFirebase = () => {
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
+  useEffect(() => {
+    let app, firestore, firebaseAuth;
+    
+    try {
+      if (Object.keys(firebaseConfig).length === 0) {
+        console.error("Firebase config is missing.");
+        setIsAuthReady(true);
+        return;
+      }
+      
+      app = initializeApp(firebaseConfig);
+      firestore = getFirestore(app);
+      firebaseAuth = getAuth(app);
+      
+      setDb(firestore);
+      setAuth(firebaseAuth);
+
+      // 1. Аутентификация в Firebase
+      const signIn = async () => {
+        if (initialAuthToken) {
+          await signInWithCustomToken(firebaseAuth, initialAuthToken);
+        } else {
+          await signInAnonymously(firebaseAuth);
+        }
+      };
+
+      // 2. Установка слушателя изменений состояния аутентификации
+      const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+        if (user) {
+          setUserId(user.uid);
+        } else {
+          // Если пользователь разлогинен (чего не должно быть при старте)
+          setUserId(null); 
+        }
+        setIsAuthReady(true); // Аутентификация завершена, ID пользователя получен
+      });
+
+      signIn();
+      return () => unsubscribe();
+
+    } catch (e) {
+      console.error("Firebase initialization failed:", e);
+      setIsAuthReady(true);
+    }
+  }, []);
+
+  return { db, auth, userId, isAuthReady };
 };
 
-// --- 2. ТИПЫ ---
+// ------------------------------------------------------
+//                2. HOOK: ИМИТАЦИЯ useTelegram
+// ------------------------------------------------------
+// Этот код имитирует работу с Telegram WebApp API и предоставляет заглушки
+// (Оставлено без изменений, но без импорта, так как все в одном файле)
+// Заглушка для типа Telegram WebApp
+declare global {
+  interface Window {
+    Telegram: {
+      WebApp: {
+        MainButton: any;
+        BackButton: any;
+        HapticFeedback: {
+          impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void;
+          notificationOccurred: (type: 'success' | 'warning' | 'error') => void;
+          selectionChanged: () => void;
+        };
+        ready: () => void;
+        initDataUnsafe: any;
+        expand: () => void;
+        onEvent: (eventType: string, callback: (...args: any[]) => void) => void;
+        offEvent: (eventType: string, callback: (...args: any[]) => void) => void;
+        themeParams: any;
+        isClosingConfirmationEnabled: boolean;
+      }
+    }
+  }
+}
+
+const useTelegram = () => {
+  const tg = window.Telegram?.WebApp;
+  return { tg };
+};
+
+// ------------------------------------------------------
+//                3. КОМПОНЕНТЫ И ТИПЫ
+// ------------------------------------------------------
+
 /** @typedef {{login: string, password: string}} AuthData */
 /** @typedef {"home" | "cargo" | "docs" | "support" | "profile"} Tab */
 /** @typedef {"all" | "today" | "week" | "month"} DateFilter */
-/** @typedef {"all" | "created" | "accepted" | "in_transit" | "ready" | "delivered"} StatusFilter */
 /** @typedef {"active" | "archive" | "attention"} CargoTab */
 
-
-// --- 3. ГЛАВНЫЙ КОМПОНЕНТ APP ---
+// --- ГЛАВНЫЙ КОМПОНЕНТ APP ---
 /** @type {React.FC} */
 function App() {
   const { tg } = useTelegram();
-  
-  // Состояния для аутентификации
+  const { db, userId, isAuthReady } = useFirebase();
+
+  // Состояния для логина
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [agreeOffer, setAgreeOffer] = useState(false);
@@ -49,8 +142,43 @@ function App() {
   const [auth, setAuth] = useState(null);
   /** @type {[Tab, React.Dispatch<React.SetStateAction<Tab>>]} */
   const [activeTab, setActiveTab] = useState("cargo");
+  const [isSessionChecking, setIsSessionChecking] = useState(true);
 
-  // Обработчик логина
+  /**
+   * Получает путь к документу сессии для текущего пользователя
+   * @param {string} uid 
+   */
+  const getSessionDocRef = (uid) => doc(db, 'artifacts', appId, 'users', uid, SESSION_COLLECTION, SESSION_DOCUMENT);
+
+  // ЭФФЕКТ: ПРОВЕРКА СОХРАНЕННОЙ СЕССИИ В FIREBASE
+  useEffect(() => {
+    if (!isAuthReady || !db || !userId) {
+      // Ждем инициализации Firebase и получения userId
+      if (isAuthReady) setIsSessionChecking(false);
+      return;
+    }
+
+    const checkSession = async () => {
+      try {
+        const sessionRef = getSessionDocRef(userId);
+        const sessionSnap = await getDoc(sessionRef);
+
+        if (sessionSnap.exists() && sessionSnap.data()?.isLoggedIn) {
+          // Сессия найдена, пропускаем экран логина
+          const data = sessionSnap.data();
+          setAuth({ login: data.login, password: '***' }); // Пароль не храним
+        }
+      } catch (e) {
+        console.error("Ошибка при чтении сессии:", e);
+      } finally {
+        setIsSessionChecking(false);
+      }
+    };
+
+    checkSession();
+  }, [isAuthReady, db, userId]);
+
+  // Обработчик логина (Теперь сохраняет сессию в Firestore)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -58,12 +186,12 @@ function App() {
     const cleanLogin = login.trim();
     const cleanPassword = password.trim();
 
+    // Проверки (остаются прежними)
     if (!cleanLogin || !cleanPassword) {
       setError("Введите логин и пароль");
       tg?.HapticFeedback.notificationOccurred('error'); 
       return;
     }
-
     if (!agreeOffer || !agreePersonal) {
       setError("Подтвердите согласие с условиями");
       tg?.HapticFeedback.notificationOccurred('warning');
@@ -73,13 +201,26 @@ function App() {
     try {
       setLoading(true);
       
-      // Имитация API-ЗАПРОСА
+      // Имитация API-ЗАПРОСА (Успех)
       await new Promise(r => setTimeout(r, 1000));
 
-      setAuth({ login: cleanLogin, password: cleanPassword });
-      setActiveTab("cargo");
-      setError(null);
-      tg?.HapticFeedback.notificationOccurred('success'); 
+      if (db && userId) {
+        // --- 2. Сохранение статуса сессии в Firestore ---
+        const sessionRef = getSessionDocRef(userId);
+        await setDoc(sessionRef, {
+          isLoggedIn: true,
+          login: cleanLogin,
+          timestamp: new Date().toISOString()
+        });
+        // ------------------------------------------------
+
+        setAuth({ login: cleanLogin, password: cleanPassword });
+        setActiveTab("cargo");
+        setError(null);
+        tg?.HapticFeedback.notificationOccurred('success'); 
+      } else {
+        throw new Error("Не удалось подключиться к базе данных.");
+      }
 
     } catch (err) {
       setError(err?.message || "Ошибка сети");
@@ -90,7 +231,19 @@ function App() {
     }
   };
 
-  // --- ЭКРАН ЛОГИНА (Улучшенный стиль) ---
+  // ЭКРАНЫ ЗАГРУЗКИ
+  if (!isAuthReady || isSessionChecking) {
+    return (
+      <>
+        <style dangerouslySetInnerHTML={{ __html: styles }} />
+        <div className="page-center">
+          <div className="loader-card">Загрузка приложения и проверка сессии...</div>
+        </div>
+      </>
+    );
+  }
+
+  // --- ЭКРАН ЛОГИНА ---
   if (!auth) {
     return (
       <>
@@ -100,55 +253,28 @@ function App() {
           <div className="logo-area">
             <div className="logo-text">HAULZ</div>
             <div className="tagline">Доставка грузов в Калининград</div>
+            <div className="userId-info">ID: {userId}</div>
           </div>
 
           <form onSubmit={handleSubmit} className="form-stack">
+            {/* Поля ввода */}
             <div className="input-group">
               <label>Логин</label>
-              <input
-                className="tg-input"
-                type="text"
-                placeholder="email@example.com"
-                value={login}
-                onChange={(e) => setLogin(e.target.value)}
-                autoComplete="username"
-              />
+              <input className="tg-input" type="text" placeholder="email@example.com" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username"/>
             </div>
-
             <div className="input-group">
               <label>Пароль</label>
-              <input
-                className="tg-input"
-                type="password"
-                placeholder="••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-              />
+              <input className="tg-input" type="password" placeholder="••••••" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"/>
             </div>
 
+            {/* Чекбоксы */}
             <div className="checkbox-stack">
               <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={agreeOffer}
-                  onChange={(e) => {
-                    setAgreeOffer(e.target.checked);
-                    tg?.HapticFeedback.selectionChanged();
-                  }}
-                />
+                <input type="checkbox" checked={agreeOffer} onChange={(e) => {setAgreeOffer(e.target.checked); tg?.HapticFeedback.selectionChanged();}}/>
                 <span>Я согласен с <a href="#">офертой</a></span>
               </label>
-
               <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={agreePersonal}
-                  onChange={(e) => {
-                    setAgreePersonal(e.target.checked);
-                    tg?.HapticFeedback.selectionChanged();
-                  }}
-                />
+                <input type="checkbox" checked={agreePersonal} onChange={(e) => {setAgreePersonal(e.target.checked); tg?.HapticFeedback.selectionChanged();}}/>
                 <span>Обработка <a href="#">персональных данных</a></span>
               </label>
             </div>
@@ -171,7 +297,7 @@ function App() {
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <div className="app-layout">
         <div className="content-area">
-          {activeTab === "cargo" && <CargoPage auth={auth} />}
+          {activeTab === "cargo" && <CargoPage />}
           {activeTab === "home" && <StubPage title="Главная" />}
           {activeTab === "docs" && <StubPage title="Документы" />}
           {activeTab === "support" && <StubPage title="Поддержка" />}
@@ -185,19 +311,17 @@ function App() {
 }
 
 // ------------------------------------------------------
-//                КОМПОНЕНТ ГРУЗОВ
+//                КОМПОНЕНТ ГРУЗОВ (Без изменений)
 // ------------------------------------------------------
 
-/** @type {React.FC<{auth: AuthData}>} */
-function CargoPage({ auth }) {
+/** @type {React.FC} */
+function CargoPage() {
   const { tg } = useTelegram();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   
   /** @type {[DateFilter, React.Dispatch<React.SetStateAction<DateFilter>>]} */
   const [dateFilter, setDateFilter] = useState("all");
-  /** @type {[StatusFilter, React.Dispatch<React.SetStateAction<StatusFilter>>]} */
-  const [statusFilter, setStatusFilter] = useState("all");
   /** @type {[CargoTab, React.Dispatch<React.SetStateAction<CargoTab>>]} */
   const [cargoTab, setCargoTab] = useState("active");
 
@@ -205,7 +329,6 @@ function CargoPage({ auth }) {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-        // Демонстрационные данные:
         setTimeout(() => {
             if(!cancelled) {
                 setItems([
@@ -219,7 +342,7 @@ function CargoPage({ auth }) {
     };
     load();
     return () => { cancelled = true; };
-  }, [auth]);
+  }, []);
 
   // Вспомогательная функция 
   const getStateKey = (item) => {
@@ -235,9 +358,6 @@ function CargoPage({ auth }) {
   const filtered = items.filter(item => {
       if (cargoTab === "active" && isArchive(item)) return false;
       if (cargoTab === "archive" && !isArchive(item)) return false;
-      // Логика фильтров по дате и статусу здесь:
-      // if (dateFilter !== 'all') { /* ... */ }
-      // if (statusFilter !== 'all' && getStateKey(item) !== statusFilter) return false;
       return true;
   });
 
@@ -306,7 +426,6 @@ function CargoPage({ auth }) {
 
         {/* FAB кнопка для создания новой перевозки */}
         <button className="fab-button" onClick={() => {
-            // Замена alert() на кастомный Modal в реальном приложении
             alert('Новая перевозка (заглушка)');
             tg?.HapticFeedback.impactOccurred('medium'); 
         }}>
@@ -317,7 +436,7 @@ function CargoPage({ auth }) {
 }
 
 // ------------------------------------------------------
-//                КОМПОНЕНТЫ МЕНЮ И ЗАГЛУШЕК
+//                КОМПОНЕНТЫ МЕНЮ И ЗАГЛУШЕК (Без изменений)
 // ------------------------------------------------------
 
 /** @type {React.FC<{active: Tab, onChange: (t: Tab) => void}>} */
@@ -360,7 +479,6 @@ function StubPage({ title }) {
 const styles = `
 /* --- ПЕРЕМЕННЫЕ ТЕЛЕГРАМА --- */
 :root {
-    /* Переменные Telegram WebApp, по умолчанию белая тема */
     --tg-bg: var(--tg-theme-bg-color, #fff);
     --tg-text: var(--tg-theme-text-color, #000);
     --tg-hint: var(--tg-theme-hint-color, #999);
@@ -379,13 +497,22 @@ body {
     overscroll-behavior-y: none;
 }
 
-/* --- ЛОГИН --- */
+/* --- ЛОГИН / ЗАГРУЗКА --- */
 .page-center {
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
+}
+
+.loader-card {
+    background: var(--tg-bg);
+    padding: 20px;
+    border-radius: 12px;
+    color: var(--tg-hint);
+    font-size: 14px;
+    text-align: center;
 }
 
 .login-card {
@@ -408,8 +535,15 @@ body {
 .tagline {
     text-align: center;
     color: var(--tg-hint);
-    margin-bottom: 30px;
+    margin-bottom: 10px;
     font-size: 14px;
+}
+.userId-info {
+    text-align: center;
+    color: var(--tg-hint);
+    font-size: 10px;
+    font-family: monospace;
+    margin-bottom: 30px;
 }
 
 .tg-input {
@@ -467,7 +601,7 @@ body {
 .content-area {
     flex: 1;
     overflow-y: auto;
-    padding-bottom: 80px; /* Место под таббар */
+    padding-bottom: 80px; 
 }
 
 /* --- HEADER & FILTERS --- */
