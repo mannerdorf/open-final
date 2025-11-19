@@ -18,12 +18,28 @@ import { Truck, Package, User, CheckCircle, XCircle, Loader2, Route } from 'luci
 // Устанавливаем уровень логирования для Firebase (полезно для отладки)
 setLogLevel('debug');
 
+// --- КОНФИГУРАЦИЯ FIREBASE (ИСПОЛЬЗУЕТСЯ, ЕСЛИ ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ ОТСУТСТВУЕТ) ---
+// Взято из предоставленных вами изображений проекта "mini-app-3e9e3".
+const FALLBACK_FIREBASE_CONFIG = {
+    apiKey: "AIzaSyC4S6zE51eW3KD663R693NR_L21x_af7KjTk",
+    authDomain: "mini-app-3e9e3.firebaseapp.com",
+    projectId: "mini-app-3e9e3",
+    storageBucket: "mini-app-3e9e3.appspot.com",
+    messagingSenderId: "91549594192",
+    appId: "1:91549594192:web:d66c355bc4f87f59c1755",
+    measurementId: "G-F9FN4T5RYL" 
+};
+
+
 // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СРЕДЫ CANVAS (ОБЯЗАТЕЛЬНЫЕ) ---
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+// ИСХОДНАЯ ПРОБЛЕМА РЕШЕНА:
+// Если __firebase_config отсутствует, используем FALLBACK_FIREBASE_CONFIG.
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
     ? JSON.parse(__firebase_config) 
-    : null; // null, если конфигурация не найдена
+    : FALLBACK_FIREBASE_CONFIG; 
 
 // --- КОНСТАНТЫ ПРИЛОЖЕНИЯ ---
 const SHIPMENTS_COLLECTION = 'shipments'; // Коллекция для хранения данных о грузах
@@ -33,7 +49,6 @@ const PATH_PREFIX = `/artifacts/${appId}/users`; // Путь для приват
 const ErrorBox = ({ title, message }) => (
     <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-6 rounded-xl shadow-lg m-4 max-w-lg mx-auto mt-12">
         <div className="flex items-center mb-2">
-            {/* ИСПРАВЛЕНИЕ: Используем XCircle (как импортировано) */}
             <XCircle className="h-6 w-6 mr-3 flex-shrink-0" />
             <p className="font-bold text-xl">{title}</p>
         </div>
@@ -87,8 +102,10 @@ const App = () => {
 
     // 1. Инициализация Firebase и Аутентификация
     useEffect(() => {
-        if (!firebaseConfig) {
-            setError("Критическая ошибка: Конфигурация Firebase не найдена.");
+        // Проверка конфигурации (теперь с FALLBACK)
+        if (!firebaseConfig || !firebaseConfig.apiKey) {
+            // Если даже FALLBACK не сработал (чего быть не должно)
+            setError("Критическая ошибка: Конфигурация Firebase не найдена или недействительна.");
             setAuthStatus('error');
             return;
         }
@@ -107,7 +124,8 @@ const App = () => {
                     if (initialAuthToken) {
                         await signInWithCustomToken(authInstance, initialAuthToken);
                     } else {
-                        await signInAnonymously(authInstance);
+                        // Убедитесь, что Anonymous Sign-in включен в настройках Firebase!
+                        await signInAnonymously(authInstance); 
                     }
                 } catch (e) {
                     setError(`Ошибка аутентификации Firebase (${e.code}): ${e.message}`);
@@ -155,6 +173,7 @@ const App = () => {
             driver: `Driver-${userId.substring(0, 4)}`,
         };
 
+        // Путь для приватных данных: /artifacts/{appId}/users/{userId}/shipments/{docId}
         const docRef = doc(db, PATH_PREFIX, userId, SHIPMENTS_COLLECTION, newShipment.id);
         
         try {
@@ -177,7 +196,7 @@ const App = () => {
     }
 
     if (authStatus === 'loading') {
-        // Явный экран загрузки для предотвращения "белого экрана"
+        // Явный экран загрузки
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
                 <div className="text-center p-8 bg-white rounded-xl shadow-2xl border-t-4 border-blue-500">
