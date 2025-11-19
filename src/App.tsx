@@ -1,95 +1,20 @@
 import React, { FormEvent, useEffect, useState, useMemo } from "react";
-import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    signInAnonymously, 
-    onAuthStateChanged, 
-    signInWithCustomToken 
-} from 'firebase/auth';
-import { 
-    getFirestore, 
-    doc, 
-    setDoc, 
-    getDoc,
-    setLogLevel
-} from 'firebase/firestore';
 import { Home, Package, FileText, User, LogIn, Loader2, Check } from 'lucide-react';
 
-// Устанавливаем уровень логирования для Firebase
-setLogLevel('debug');
-
-// --- КОНФИГУРАЦИЯ FIREBASE ---
-// ВАЖНО: Мы используем вашу конфигурацию как заглушку, 
-// если переменная окружения не предоставлена.
-const FALLBACK_FIREBASE_CONFIG = {
-    apiKey: "AIzaSyC4S6zE51eW3KD663R693NR_L21x_af7KjTk", // Ваш ключ API
-    authDomain: "mini-app-3e9e3.firebaseapp.com",
-    projectId: "mini-app-3e9e3",
-    storageBucket: "mini-app-3e9e3.appspot.com",
-    messagingSenderId: "91549594192",
-    appId: "1:91549594192:web:d66c355bc4f87f59c1755",
-    measurementId: "G-F9FN4T5RYL" 
-};
-
-// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СРЕДЫ CANVAS ---
-const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-// Используем глобальную конфигурацию или FALLBACK
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-    ? JSON.parse(__firebase_config) 
-    : FALLBACK_FIREBASE_CONFIG; 
-
-// Инициализируем Firebase здесь, чтобы использовать в хуке
-const firebaseApp = initializeApp(firebaseConfig);
-const firestoreDb = getFirestore(firebaseApp);
-const firestoreAuth = getAuth(firebaseApp);
-
-const appId = rawAppId.split('/')[0];  // Очистка appId
-
-const SESSION_COLLECTION = 'sessions';
-const SESSION_DOCUMENT = 'current_session';
-
+// --- КОНСТАНТЫ ПРИЛОЖЕНИЯ ---
+// Удалены все константы и импорты Firebase
 
 /* ------------------------------------------------------
-        HOOK: Firebase Auth
-        Теперь получает db и auth из внешних констант.
+        HOOK: useLocalAuth (Имитация аутентификации)
+        Теперь просто возвращает состояние готовности.
 ------------------------------------------------------ */
-const useFirebaseAuth = () => {
-    const [userId, setUserId] = useState(null);
-    const [isReady, setIsReady] = useState(false);
+const useLocalAuth = () => {
+    // В чисто клиентском приложении "готовность" наступает сразу.
+    const isReady = true; 
+    // Локальная симуляция UID (не используется для реального хранения)
+    const userId = "LOCAL-SIMULATED-USER-ID"; 
 
-    useEffect(() => {
-        const authInstance = firestoreAuth;
-
-        const unsubscribe = onAuthStateChanged(authInstance, (user) => {
-            if (user) setUserId(user.uid);
-            else setUserId(null);
-            
-            // Задержка готовности до первой проверки (или входа)
-            if (!isReady) setIsReady(true);
-        });
-
-        // Входим анонимно (или по токену)
-        const startAuth = async () => {
-            try {
-                if (initialAuthToken) {
-                    await signInWithCustomToken(authInstance, initialAuthToken);
-                } else {
-                    await signInAnonymously(authInstance);
-                }
-            } catch (e) {
-                console.error("AUTH ERROR:", e);
-                // Если не удалось войти, все равно помечаем как готовое (для UI)
-                setIsReady(true); 
-            }
-        };
-
-        startAuth();
-        return () => unsubscribe();
-    }, [isReady]);
-
-    return { userId, isReady, db: firestoreDb, auth: firestoreAuth };
+    return { userId, isReady };
 };
 
 
@@ -104,7 +29,7 @@ const useTelegram = () => {
 // --- КОМПОНЕНТЫ И UI ---
 
 /**
- * TabBar (как у тебя, но со стилями Tailwind)
+ * TabBar (Таббар)
  */
 function TabBar({ active, onChange }) {
     const items = [
@@ -137,7 +62,7 @@ function TabBar({ active, onChange }) {
  */
 function App() {
     const { tg } = useTelegram();
-    const { userId, isReady, db } = useFirebaseAuth();
+    const { userId, isReady } = useLocalAuth(); // Используем локальную симуляцию
 
     const [login, setLogin] = useState("");
     const [password, setPassword] = useState("");
@@ -146,41 +71,17 @@ function App() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const [authData, setAuthData] = useState(null);
+    // Локальное состояние для хранения авторизационных данных (имитация сессии)
+    const [authData, setAuthData] = useState(null); 
     const [activeTab, setActiveTab] = useState("cargo");
+    
+    // В чисто клиентском режиме проверка сессии не нужна, она сразу "проверена"
+    const sessionChecked = true; 
 
-    const [sessionChecked, setSessionChecked] = useState(false);
-
-    // Мемоизированная ссылка на документ сессии
-    const getSessionRef = useMemo(() => {
-        return (uid) => doc(db, "artifacts", appId, "users", uid, SESSION_COLLECTION, SESSION_DOCUMENT);
-    }, [db]);
+    // Удален useEffect для проверки сессии через Firestore
 
 
-    // Проверка сессии при готовности аутентификации
-    useEffect(() => {
-        if (!isReady || !userId || !db) return;
-
-        const loadSession = async () => {
-            try {
-                const ref = getSessionRef(userId);
-                const snap = await getDoc(ref);
-
-                if (snap.exists() && snap.data().isLoggedIn) {
-                    setAuthData({ login: snap.data().login });
-                }
-            } catch (e) {
-                console.log("Session check error:", e);
-            }
-
-            setSessionChecked(true);
-        };
-
-        loadSession();
-    }, [isReady, userId, db, getSessionRef]);
-
-
-    // Обработчик входа в систему
+    // Обработчик входа в систему (полностью локальная логика)
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -202,19 +103,15 @@ function App() {
         try {
             setLoading(true);
 
-            // ИМИТАЦИЯ успешной авторизации
-            await new Promise((res) => setTimeout(res, 500));
-
-            if (userId) {
-                // Сохранение данных сессии в Firestore
-                await setDoc(getSessionRef(userId), {
-                    isLoggedIn: true,
-                    login: cleanLogin,
-                    ts: Date.now()
-                });
-            }
-
-            setAuthData({ login: cleanLogin });
+            // ИМИТАЦИЯ успешной авторизации (без обращения к Firestore)
+            await new Promise((res) => setTimeout(res, 500)); 
+            
+            // Сохранение данных в локальном состоянии
+            setAuthData({ 
+                isLoggedIn: true,
+                login: cleanLogin, 
+            }); 
+            
             setActiveTab("cargo");
         } catch (err) {
             console.error("Auth process error:", err);
@@ -229,6 +126,7 @@ function App() {
               Рендер: Экраны
     ------------------------------------------------------ */
     if (!isReady || !sessionChecked) {
+        // Хотя isReady всегда true, оставляем проверку на всякий случай
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
@@ -303,10 +201,10 @@ function App() {
                     </div>
                 )}
                 
-                {/* Отладочная информация */}
+                {/* Отладочная информация (Теперь локальная) */}
                 <div className="mt-8 text-xs text-gray-400 border-t pt-4">
-                    <p>Auth Status: {isReady ? 'Ready' : 'Pending'}</p>
-                    <p className="break-all">UID: {userId || 'N/A'}</p>
+                    <p>Auth Status: {isReady ? 'Ready (Local)' : 'Pending'}</p>
+                    <p className="break-all">Simulated UID: {userId}</p>
                 </div>
             </div>
         );
@@ -357,7 +255,7 @@ function App() {
                 </div>
                 <h2 className="text-2xl font-bold text-gray-800">Добро пожаловать, {authData.login}</h2>
                 <p className="text-gray-500 text-sm mt-1">
-                    Ваш UID: <code className="break-all">{userId}</code>
+                    Ваш ID: <code className="break-all">{userId} (локальная симуляция)</code>
                 </p>
             </header>
             
