@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState, useMemo } from "react";
+import { FormEvent, useEffect, useState, useMemo } from "react"; 
 import { db, auth } from "./firebase";   // ← ВАЖНО: подключаем Firebase ОТСЮДА
 import { 
   signInAnonymously, 
