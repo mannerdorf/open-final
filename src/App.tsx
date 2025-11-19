@@ -31,14 +31,15 @@ const PATH_PREFIX = `/artifacts/${appId}/users`; // Путь для приват
 
 // Компонент для отображения критических ошибок
 const ErrorBox = ({ title, message }) => (
-    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-6 rounded-xl shadow-lg m-4">
+    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-6 rounded-xl shadow-lg m-4 max-w-lg mx-auto mt-12">
         <div className="flex items-center mb-2">
-            <XCircleIcon className="h-6 w-6 mr-3 flex-shrink-0" />
+            {/* ИСПРАВЛЕНИЕ: Используем XCircle (как импортировано) */}
+            <XCircle className="h-6 w-6 mr-3 flex-shrink-0" />
             <p className="font-bold text-xl">{title}</p>
         </div>
         <p className="mt-2 text-sm">{message}</p>
         <p className="mt-4 text-xs italic opacity-80">
-            Для работы приложения необходимо, чтобы в консоли Firebase был включен Анонимный вход.
+            Проверьте консоль для получения подробной информации.
         </p>
     </div>
 );
@@ -81,6 +82,7 @@ const App = () => {
     // Состояние для UI
     const [authStatus, setAuthStatus] = useState('loading');
     const [error, setError] = useState(null);
+    const [localMessage, setLocalMessage] = useState(null); // Для сообщений пользователю
     const [shipments, setShipments] = useState([]); // Для данных приложения HAULZ
 
     // 1. Инициализация Firebase и Аутентификация
@@ -139,6 +141,7 @@ const App = () => {
     const addTestShipment = async () => {
         if (!db || !userId) {
             console.error("Firebase не готов.");
+            setLocalMessage({ type: 'error', text: 'Система не готова. Подождите завершения аутентификации.' });
             return;
         }
 
@@ -157,19 +160,33 @@ const App = () => {
         try {
             await setDoc(docRef, newShipment);
             console.log("Тестовый груз добавлен:", newShipment.id);
-            // В реальном приложении вы бы использовали onSnapshot для обновления списка
             setShipments(prev => [...prev, newShipment]);
+            setLocalMessage({ type: 'success', text: `Груз #${newShipment.id.slice(-4)} успешно добавлен!` });
+            setTimeout(() => setLocalMessage(null), 5000);
         } catch (e) {
             console.error("Ошибка при добавлении груза:", e);
-            // Замена alert() на консольное сообщение, как того требуют инструкции
-            console.warn(`Не удалось добавить груз: ${e.message}. Проверьте правила безопасности Firestore.`);
+            setLocalMessage({ type: 'error', text: `Не удалось добавить груз: ${e.message}. Проверьте правила безопасности Firestore.` });
         }
     };
 
     // --- РЕНДЕРИНГ UI ---
 
     if (error) {
+        // Отображение ErrorBox, если есть критическая ошибка
         return <ErrorBox title="Ошибка Инициализации/Аутентификации" message={error} />;
+    }
+
+    if (authStatus === 'loading') {
+        // Явный экран загрузки для предотвращения "белого экрана"
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+                <div className="text-center p-8 bg-white rounded-xl shadow-2xl border-t-4 border-blue-500">
+                    <Loader2 className="h-10 w-10 text-blue-500 animate-spin mx-auto mb-4" />
+                    <p className="text-xl font-semibold text-gray-700">Загрузка приложения и подключение к Firebase...</p>
+                    <p className="text-sm text-gray-500 mt-2">Пожалуйста, подождите. Для работы требуется анонимная аутентификация.</p>
+                </div>
+            </div>
+        );
     }
 
     const isReady = authStatus === 'ready' && db !== null;
@@ -185,6 +202,19 @@ const App = () => {
                 </div>
                 <p className="text-gray-600">Основа на React и Firebase/Firestore</p>
             </header>
+            
+            {/* БЛОК СООБЩЕНИЙ */}
+            {localMessage && (
+                <div className={`p-4 mb-6 rounded-lg shadow-md ${localMessage.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-green-100 text-green-800 border border-green-300'}`}>
+                    <div className="flex justify-between items-center">
+                        <p className="font-medium">{localMessage.text}</p>
+                        <button onClick={() => setLocalMessage(null)} className="text-lg font-bold ml-4">
+                            &times;
+                        </button>
+                    </div>
+                </div>
+            )}
+
 
             {/* БЛОК СТАТУСА */}
             <div className="mb-8 p-5 border border-indigo-200 bg-indigo-50 rounded-xl shadow-lg">
@@ -232,7 +262,7 @@ const App = () => {
                     Тестовые Грузы ({shipments.length})
                 </h3>
                 
-                {shipments.length === 0 && isReady ? (
+                {shipments.length === 0 ? (
                     <div className="text-center p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
                         <Package className="h-10 w-10 text-gray-400 mx-auto mb-3" />
                         <p className="text-gray-500">Грузы не добавлены. Нажмите кнопку выше, чтобы добавить первый тестовый груз.</p>
