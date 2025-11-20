@@ -13,26 +13,35 @@ type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 // Точка входа для запросов на ваш прокси-сервер Vercel
 const PROXY_API_BASE_URL = '/api/perevozki'; 
 
-// --- ЭТАЛОННАЯ КОНСТАНТА ДЛЯ ОТОБРАЖЕНИЯ CURL ---
-// ЭТО ТОЧНО ТА ЖЕ СТРОКА, КОТОРУЮ ВЫ ПРЕДОСТАВИЛИ.
-const STATIC_CURL_COMMAND = `curl --location 'https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki?DateB=2024-12-11&DateE=2026-01-01' \\
-  --header 'Auth: Basic order@lal-auto.com:ZakaZ656565' \\
-  --header 'Authorization: Basic YWRtaW46anVlYmZueWU='`;
-
-
 // --- ФУНКЦИЯ ДЛЯ BASIC AUTH ---
 // Фронтенд всегда должен кодировать логин:пароль, отправляя его в прокси
-const getAuthHeader = (login: string, password: string): { Authorization: string, encodedCredentials: string } => {
+const getAuthHeader = (login: string, password: string): { Authorization: string } => {
     const credentials = `${login}:${password}`;
     // btoa доступен в браузере
     const encoded = btoa(credentials); 
     return {
         Authorization: `Basic ${encoded}`,
-        encodedCredentials: encoded, // Возвращаем закодированную строку
     };
 };
 
+// --- ФУНКЦИЯ ДЛЯ ГЕНЕРАЦИИ ДИНАМИЧЕСКОГО CURL (для отображения) ---
+const generateDynamicCurlString = (clientLogin: string, clientPassword: string): string => {
+    // Параметры 1С (DateB, DateE) и заголовок Authorization (Admin) 
+    // остаются статичными, как в вашем эталоне
+    const dateB = '2024-12-11';
+    const dateE = '2026-01-01';
+    const adminAuthBase64 = 'Basic YWRtaW46anVlYmZueWU='; 
+    
+    // Заголовок Auth (Client) - КРИТИЧНО: НЕКОДИРОВАННЫЕ учетные данные
+    const clientAuthRaw = `Basic ${clientLogin}:${clientPassword}`; 
+
+    return `curl --location 'https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki?DateB=${dateB}&DateE=${dateE}' \\
+  --header 'Auth: ${clientAuthRaw}' \\
+  --header 'Authorization: ${adminAuthBase64}'`;
+};
+
 export default function App() {
+    // Теперь логин и пароль будут динамически влиять на CURL
     const [login, setLogin] = useState("order@lal-auto.com"); 
     const [password, setPassword] = useState("ZakaZ656565"); 
     const [agreeOffer, setAgreeOffer] = useState(true);
@@ -46,9 +55,17 @@ export default function App() {
     const [theme, setTheme] = useState('dark');
     const isThemeLight = theme === 'light';
 
-    // --- ИСПОЛЬЗУЕМ ЭТАЛОННУЮ СТРОКУ ПО УМОЛЧАНИЮ ---
-    const [curlCommand, setCurlCommand] = useState<string>(STATIC_CURL_COMMAND);
+    // --- ДИНАМИЧЕСКОЕ СОСТОЯНИЕ ДЛЯ CURL ---
+    const [curlCommand, setCurlCommand] = useState<string>(''); 
     
+    // --- ХУК ДЛЯ ОБНОВЛЕНИЯ CURL ---
+    // Обновляем curlCommand при изменении логина или пароля
+    useEffect(() => {
+        const dynamicCurl = generateDynamicCurlString(login.trim(), password.trim());
+        setCurlCommand(dynamicCurl);
+    }, [login, password]);
+
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -69,7 +86,7 @@ export default function App() {
         // Получаем закодированный заголовок для отправки на прокси
         const { Authorization } = getAuthHeader(cleanLogin, cleanPassword);
 
-        // Используем фиксированные даты для первого запроса авторизации (это не влияет на CURL)
+        // Используем фиксированные даты для первого запроса авторизации
         const fixedDateFrom = '2024-01-01';
         const fixedDateTo = '2025-01-01';
         
@@ -112,7 +129,7 @@ export default function App() {
         setAuth(null);
         setActiveTab("cargo");
         setError(null);
-        setCurlCommand(STATIC_CURL_COMMAND); // Возвращаем эталонную команду при выходе
+        // При выходе CURL обновится через useEffect
     }
     
     const toggleTheme = () => {
@@ -124,7 +141,7 @@ export default function App() {
     if (!auth) {
         return (
             <>
-            {/* Ваши стили */}
+            {/* Ваши стили (без изменений) */}
             <style>
                 {`
                 /* ... (Стили без изменений) ... */
@@ -533,7 +550,7 @@ export default function App() {
 
                     {error && <p className="login-error mt-4"><X className="w-5 h-5 mr-2" />{error}</p>}
                     
-                    {/* --- ПОЛЕ ДЛЯ ОТОБРАЖЕНИЯ ЭТАЛОННОГО CURL --- */}
+                    {/* --- ПОЛЕ ДЛЯ ОТОБРАЖЕНИЯ ЭТАЛОННОГО CURL (теперь динамического) --- */}
                     <div className="curl-display">
                         <strong className="text-xs block mb-1">Эталонный CURL (Vercel Proxy → Внешний API 1С)</strong>
                         <pre>{curlCommand}</pre>
@@ -695,10 +712,10 @@ function CargoPage({ auth }: CargoPageProps) {
     // Хук для загрузки данных при монтировании (после успешной авторизации)
     useEffect(() => {
         // Мы вызываем loadData только если авторизованы
-        if (auth.login && auth.password) {
+        if (auth?.login && auth?.password) {
             loadData(auth.login, auth.password);
         }
-    }, [auth.login, auth.password]); 
+    }, [auth?.login, auth?.password]); 
 
 
     return (
