@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff } from 'lucide-react';
 
-// --- ТИПЫ ДАННЫХ ---
+// --- ТИПЫ ДАННЫХ ---5
 type AuthData = {
     login: string;
     password: string;
