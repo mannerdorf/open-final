@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
-import { LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff } from 'lucide-react'; // Добавлены Eye и EyeOff
+import { LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff } from 'lucide-react';
 
+// --- ТИПЫ ДАННЫХ ---
 type AuthData = {
     login: string;
     password: string;
@@ -12,6 +13,9 @@ type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 const PROXY_API_BASE_URL = '/api/perevozki'; 
 
 // --- ФУНКЦИЯ ДЛЯ BASIC AUTH ---
+/**
+ * Создает заголовок Basic Authorization из логина и пароля, кодируя их в Base64.
+ */
 const getAuthHeader = (login: string, password: string): { Authorization: string } => {
     const credentials = `${login}:${password}`;
     const encoded = btoa(credentials);
@@ -27,7 +31,7 @@ export default function App() {
     const [agreePersonal, setAgreePersonal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [showPassword, setShowPassword] = useState(false); // Новое состояние для показа/скрытия пароля
+    const [showPassword, setShowPassword] = useState(false);
 
     const [auth, setAuth] = useState<AuthData | null>(null);
     const [activeTab, setActiveTab] = useState<Tab>("cargo"); 
@@ -54,12 +58,11 @@ export default function App() {
         try {
             setLoading(true);
             
-            // --- ДЛЯ ОТЛАДКИ: Вывод заголовка авторизации ---
             const authHeader = getAuthHeader(cleanLogin, cleanPassword);
-            console.log("Отправляемый заголовок Authorization:", authHeader.Authorization);
-            // --- КОНЕЦ ОТЛАДКИ ---
 
-            const res = await fetch(`${PROXY_API_BASE_URL}`, { // Убрал "?checkAuth=true", так как он не используется прокси
+            // --- КОРРЕКЦИЯ: Используем GET для авторизации и запроса данных ---
+            // Отправляем запрос на прокси. Если он вернет 200, авторизация успешна.
+            const res = await fetch(`${PROXY_API_BASE_URL}`, { 
                 method: "GET", 
                 headers: { 
                     ...authHeader 
@@ -68,6 +71,9 @@ export default function App() {
 
             if (!res.ok) {
                 let message = `Ошибка авторизации: ${res.status}. Проверьте логин и пароль.`;
+                if (res.status === 401) {
+                    message = "Ошибка авторизации (401). Проверьте логин и пароль.";
+                }
                 setError(message);
                 setAuth(null);
                 return;
@@ -99,27 +105,91 @@ export default function App() {
     if (!auth) {
         return (
             <>
+            {/* ВНИМАНИЕ: Стили для theme/login/switch/password-toggle 
+                были перемещены в App.tsx для удобства в песочнице,
+                но в реальном проекте их лучше держать в styles.css.
+            */}
             <style>
                 {`
-                /* Font Inter - Оставлен здесь для корректной работы в песочнице */
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
                 
-                /* Глобальный сброс для box-sizing */
                 * {
                     box-sizing: border-box;
                 }
                 body {
                     margin: 0;
-                    background-color: var(--color-bg-primary); /* Установим фон body */
+                    background-color: var(--color-bg-primary); 
+                    font-family: 'Inter', sans-serif;
+                }
+                
+                :root {
+                    /* Dark Mode Defaults */
+                    --color-bg-primary: #1f2937; /* gray-900 - Фон страницы */
+                    --color-bg-secondary: #374151; /* gray-800 - Фон шапки */
+                    --color-bg-card: #374151; /* gray-800 - Фон карточек/модалов */
+                    --color-bg-hover: #4b5563; /* gray-600 */
+                    --color-bg-input: #4b5563; /* gray-600 */
+                    --color-text-primary: #e5e7eb; /* gray-100 */
+                    --color-text-secondary: #9ca3af; /* gray-400 */
+                    --color-border: #4b5563; /* gray-600 */
+                    --color-ai-bg: rgba(75, 85, 99, 0.5); /* gray-600/50 */
+                    --color-primary-blue: #3b82f6; /* Blue 500 */
+                    --color-error-bg: rgba(185, 28, 28, 0.1); /* red-700 / 10% opacity */
+                    --color-error-border: #b91c1c; /* red-700 */
+                    --color-error-text: #fca5a5; /* red-200 */
+                }
+                
+                .light-mode {
+                    --color-bg-primary: #f9fafb; /* gray-50 */
+                    --color-bg-secondary: #ffffff; /* white */
+                    --color-bg-card: #ffffff;
+                    --color-bg-hover: #f3f4f6; /* gray-100 */
+                    --color-bg-input: #f3f4f6; /* gray-100 */
+                    --color-text-primary: #1f2937; /* gray-900 */
+                    --color-text-secondary: #6b7280; /* gray-500 */
+                    --color-border: #e5e7eb; /* gray-200 */
+                    --color-ai-bg: #f3f4f6; /* gray-100 */
+                    --color-primary-blue: #2563eb; /* Blue 700 */
+                    --color-error-bg: #fee2e2; /* red-100 */
+                    --color-error-border: #fca5a5; /* red-300 */
+                    --color-error-text: #b91c1c; /* red-700 */
                 }
 
-                /* Стили для формы авторизации, использующие классы из styles.css */
+                .app-container {
+                    min-height: 100vh;
+                    background-color: var(--color-bg-primary);
+                    color: var(--color-text-primary);
+                    font-family: 'Inter', sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    transition: background-color 0.3s, color 0.3s;
+                }
+                
+                /* Custom utility classes */
+                .text-theme-text { color: var(--color-text-primary); }
+                .text-theme-secondary { color: var(--color-text-secondary); }
+                .text-theme-primary { color: var(--color-primary-blue); }
+                .border-theme-border { border-color: var(--color-border); }
+                .hover\\:bg-theme-hover-bg:hover { background-color: var(--color-bg-hover); }
+
+                /* Login screen styles */
                 .login-form-wrapper {
                     min-height: 100vh;
                     display: flex;
                     justify-content: center;
                     align-items: center;
                     padding: 2rem;
+                }
+                .login-card {
+                    max-width: 28rem;
+                    width: 100%;
+                    margin: 0 auto;
+                    background-color: var(--color-bg-card);
+                    padding: 2.5rem;
+                    border-radius: 1rem;
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+                    border: 1px solid var(--color-border);
+                    position: relative;
                 }
                 .logo-text {
                     font-size: 2.5rem;
@@ -145,89 +215,28 @@ export default function App() {
                     color: var(--color-text-primary);
                     margin-bottom: 0.3rem;
                 }
-                .checkbox-row {
-                    display: flex;
-                    align-items: center;
-                    font-size: 0.875rem;
-                    color: var(--color-text-secondary);
-                    cursor: pointer; /* Делаем всю строку кликабельной для тумблера */
-                }
-                .checkbox-row a {
-                    color: var(--color-primary-blue);
-                    text-decoration: none;
-                    font-weight: 600;
-                }
-                .checkbox-row a:hover {
-                    text-decoration: underline;
-                }
-
-                /* Переключатель темы */
-                .theme-toggle-container {
-                    position: absolute;
-                    top: 1rem;
-                    right: 1rem;
-                }
-                .theme-toggle-button {
-                    background-color: transparent; 
-                    border: none;
-                    padding: 0.5rem;
-                    cursor: pointer;
-                    transition: color 0.2s;
-                    color: var(--color-text-secondary);
-                }
-                .theme-toggle-button:hover {
-                    color: var(--color-primary-blue);
-                }
-                .theme-toggle-button svg {
-                    width: 1.25rem;
-                    height: 1.25rem;
-                    transition: color 0.2s;
-                }
-
-                /* Стили для тумблеров (switch) */
-                .switch-wrapper {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
+                .login-input {
                     width: 100%;
+                    background-color: var(--color-bg-input);
+                    border: 1px solid var(--color-border);
+                    color: var(--color-text-primary);
+                    padding: 0.75rem;
+                    padding-right: 3rem; /* Отступ для кнопки глаза */
+                    border-radius: 0.75rem;
+                    transition: all 0.15s;
+                    outline: none;
                 }
-
-                .switch-container {
-                    position: relative;
-                    width: 2.75rem; /* ~44px */
-                    height: 1.5rem; /* ~24px */
-                    border-radius: 9999px; /* fully rounded */
-                    transition: background-color 0.2s ease-in-out;
-                    flex-shrink: 0;
-                    background-color: var(--color-text-secondary); /* default gray */
+                .login-input:focus {
+                    box-shadow: 0 0 0 2px var(--color-primary-blue);
+                    border-color: var(--color-primary-blue);
                 }
-                .switch-container.checked {
-                    background-color: var(--color-primary-blue); /* blue when checked */
-                }
-                .switch-knob {
-                    position: absolute;
-                    top: 0.125rem; /* 2px */
-                    left: 0.125rem; /* 2px */
-                    width: 1.25rem; /* 20px */
-                    height: 1.25rem; /* 20px */
-                    background-color: white;
-                    border-radius: 9999px;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    transform: translateX(0);
-                    transition: transform 0.2s ease-in-out;
-                }
-                .switch-container.checked .switch-knob {
-                    transform: translateX(1.25rem); /* moves 20px to the right */
-                }
-
-                /* Стили для поля пароля с кнопкой */
                 .password-input-container {
                     position: relative;
                     width: 100%;
                 }
                 .toggle-password-visibility {
                     position: absolute;
-                    right: 0.75rem; /* padding login-input */
+                    right: 0.75rem;
                     top: 50%;
                     transform: translateY(-50%);
                     background: none;
@@ -243,6 +252,135 @@ export default function App() {
                 .toggle-password-visibility:hover {
                     color: var(--color-primary-blue);
                 }
+
+                .login-error {
+                    padding: 0.75rem;
+                    background-color: var(--color-error-bg);
+                    border: 1px solid var(--color-error-border);
+                    color: var(--color-error-text); 
+                    font-size: 0.875rem;
+                    border-radius: 0.5rem;
+                    margin-top: 1rem;
+                    display: flex;
+                    align-items: center;
+                }
+
+                /* Switch/Tumbler styles */
+                .checkbox-row {
+                    display: flex;
+                    align-items: center;
+                    font-size: 0.875rem;
+                    color: var(--color-text-secondary);
+                    cursor: pointer;
+                }
+                .checkbox-row a {
+                    color: var(--color-primary-blue);
+                    text-decoration: none;
+                    font-weight: 600;
+                }
+                .switch-wrapper {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    width: 100%;
+                }
+                .switch-container {
+                    position: relative;
+                    width: 2.75rem; 
+                    height: 1.5rem; 
+                    border-radius: 9999px;
+                    transition: background-color 0.2s ease-in-out;
+                    flex-shrink: 0;
+                    background-color: var(--color-text-secondary);
+                }
+                .switch-container.checked {
+                    background-color: var(--color-primary-blue);
+                }
+                .switch-knob {
+                    position: absolute;
+                    top: 0.125rem; 
+                    left: 0.125rem; 
+                    width: 1.25rem; 
+                    height: 1.25rem; 
+                    background-color: white;
+                    border-radius: 9999px;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                    transform: translateX(0);
+                    transition: transform 0.2s ease-in-out;
+                }
+                .switch-container.checked .switch-knob {
+                    transform: translateX(1.25rem); 
+                }
+
+                /* Other styles (header, cards, etc.) */
+                .app-header {
+                    padding: 1rem;
+                    background-color: var(--color-bg-secondary);
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    position: sticky;
+                    top: 0;
+                    z-index: 10;
+                    border-bottom: 1px solid var(--color-border);
+                }
+                .app-main {
+                    flex-grow: 1;
+                    padding: 1.5rem 1rem 4rem 1rem;
+                    display: flex;
+                    justify-content: center;
+                    align-items: flex-start;
+                }
+                .ai-summary-card {
+                    background-color: var(--color-bg-card);
+                    border-radius: 0.75rem;
+                    padding: 1rem;
+                    border: 1px solid var(--color-border);
+                    margin-bottom: 1.5rem;
+                }
+                .empty-state-card {
+                    background-color: var(--color-bg-card);
+                    border: 1px solid var(--color-border);
+                    border-radius: 1rem;
+                    padding: 3rem;
+                    text-align: center;
+                    margin-top: 5rem;
+                }
+                .grid-container {
+                    display: grid;
+                    grid-template-columns: 1fr;
+                    gap: 1rem;
+                }
+                @media (min-width: 768px) {
+                    .grid-container {
+                        grid-template-columns: 1fr 1fr;
+                    }
+                }
+                .perevozka-card {
+                    background-color: var(--color-bg-card);
+                    border-radius: 0.75rem;
+                    border: 1px solid var(--color-border);
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                    transition: box-shadow 0.3s, border-color 0.3s;
+                }
+                .card-header {
+                    padding: 0.75rem;
+                    background-color: var(--color-bg-secondary);
+                    border-bottom: 1px solid var(--color-border);
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .fixed { position: fixed; }
+                .bottom-0 { bottom: 0; }
+                .left-0 { left: 0; }
+                .right-0 { right: 0; }
+                .z-50 { z-index: 50; }
+                .shadow-lg { box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1), 0 -2px 4px -2px rgba(0, 0, 0, 0.06); }
+
+
                 `}
             </style>
             
@@ -271,6 +409,7 @@ export default function App() {
                                 value={login}
                                 onChange={(e) => setLogin(e.target.value)}
                                 autoComplete="username"
+                                style={{paddingRight: '0.75rem'}} /* Убираем лишний отступ для "глаза" */
                             />
                         </div>
 
@@ -306,7 +445,7 @@ export default function App() {
                             </span>
                             <div 
                                 className={`switch-container ${agreeOffer ? 'checked' : ''}`}
-                                onClick={() => setAgreeOffer(!agreeOffer)} // Переключаем состояние при клике
+                                onClick={() => setAgreeOffer(!agreeOffer)}
                             >
                                 <div className="switch-knob"></div>
                             </div>
@@ -322,7 +461,7 @@ export default function App() {
                             </span>
                             <div 
                                 className={`switch-container ${agreePersonal ? 'checked' : ''}`}
-                                onClick={() => setAgreePersonal(!agreePersonal)} // Переключаем состояние при клике
+                                onClick={() => setAgreePersonal(!agreePersonal)}
                             >
                                 <div className="switch-knob"></div>
                             </div>
@@ -337,7 +476,7 @@ export default function App() {
                         </button>
                     </form>
 
-                    {error && <p className="login-error mt-4">{error}</p>}
+                    {error && <p className="login-error mt-4"><X className="w-5 h-5 mr-2" />{error}</p>}
                 </div>
             </div>
             </>
@@ -442,23 +581,29 @@ function CargoPage({ auth }: CargoPageProps) {
             const dateFrom = formatDateForApi(oneYearAgo);
             const dateTo = formatDateForApi(today);
             
+            // Query parameters для GET
             const queryParams = new URLSearchParams({
                 dateFrom: dateFrom,
                 dateTo: dateTo,
             }).toString();
 
             try {
+                // --- ИСПОЛЬЗУЕТСЯ МЕТОД GET ---
                 const url = `${PROXY_API_BASE_URL}?${queryParams}`;
                 
                 const res = await fetch(url, {
                     method: "GET",
                     headers: { 
+                        // Basic Auth Header
                         ...getAuthHeader(auth.login, auth.password)
                     },
                 });
 
                 if (!res.ok) {
                     let message = `Ошибка загрузки: ${res.status}. Убедитесь в корректности данных и прокси.`;
+                    if (res.status === 401) {
+                        message = "Ошибка авторизации (401). Проверьте логин и пароль.";
+                    }
                     if (!cancelled) setError(message);
                     return;
                 }
@@ -496,9 +641,10 @@ function CargoPage({ auth }: CargoPageProps) {
         <div className="p-4">
             <h2 className="text-3xl font-bold text-theme-text mb-2">Мои перевозки</h2>
             <p className="text-theme-secondary mb-4 pb-4 border-b border-theme-border">
-                Данные загружаются методом **GET** с передачей учетных данных в заголовке **Authorization: Basic** (согласно Postman).
+                Данные загружаются методом **GET** с передачей учетных данных в заголовке **Authorization: Basic**.
             </p>
 
+            {/* AI Summary Card */}
             <div className="ai-summary-card">
                 <div className="flex items-start">
                     <span className="mr-3 text-theme-primary font-bold text-xl">AI</span>
@@ -608,3 +754,41 @@ function TabBar({ active, onChange }: TabBarProps) {
                 icon={<FileText className="w-5 h-5" />}
                 active={active === "docs"}
                 onClick={() => onChange("docs")}
+            />
+            <TabButton
+                label="Поддержка"
+                icon={<MessageCircle className="w-5 h-5" />}
+                active={active === "support"}
+                onClick={() => onChange("support")}
+            />
+            <TabButton
+                label="Профиль"
+                icon={<User className="w-5 h-5" />}
+                active={active === "profile"}
+                onClick={() => onChange("profile")}
+            />
+        </div>
+    );
+}
+
+type TabButtonProps = {
+    label: string;
+    icon: React.ReactNode;
+    active: boolean;
+    onClick: () => void;
+};
+
+function TabButton({ label, icon, active, onClick }: TabButtonProps) {
+    const activeClass = active ? 'text-theme-primary' : 'text-theme-secondary';
+    const hoverClass = 'hover:bg-theme-hover-bg';
+    
+    return (
+        <button
+            className={`flex flex-col items-center justify-center p-2 rounded-lg text-sm font-medium transition-colors ${activeClass} ${hoverClass}`}
+            onClick={onClick}
+        >
+            <span className="tab-icon mb-0.5">{icon}</span>
+            <span className="text-xs">{label}</span>
+        </button>
+    );
+}
