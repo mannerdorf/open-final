@@ -1,25 +1,234 @@
-/* Скрываем скроллбар для горизонтального списка фильтров */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* Основные цвета берутся из Telegram (работает автоматически и для светлой, и для темной темы) */
-body {
-  background-color: var(--tg-theme-bg-color, #ffffff);
-  color: var(--tg-theme-text-color, #000000);
+/* Base Reset & Variables (optional for Tailwind compatibility) */
+.app-container {
+    min-height: 100vh;
+    background-color: #1f2937; /* gray-900 */
+    color: #e5e7eb; /* gray-100 */
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Анимация нажатия (Active state) */
-.cargo-card:active {
+/* Header */
+.app-header {
+    padding: 1rem;
+    background-color: #374151; /* gray-800 */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid #4b5563; /* gray-700 */
+}
+
+.header-title {
+    display: flex;
+    align-items: center;
+}
+
+.header-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: #3b82f6; /* blue-500 */
+    margin-right: 0.5rem;
+}
+
+.logout-button {
+    padding: 0.5rem;
+    color: #9ca3af; /* gray-400 */
+    border-radius: 9999px; /* rounded-full */
+    transition: all 0.2s;
+}
+.logout-button:hover {
+    color: #ef4444; /* red-500 */
+    background-color: #4b5563; /* gray-700 */
+}
+
+/* Main Content */
+.app-main {
+    flex-grow: 1;
+    padding: 1.5rem 1rem 4rem 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+/* Login Card */
+.login-card {
+    max-width: 28rem;
+    width: 100%;
+    margin: 0 auto;
+    background-color: #374151; /* gray-800 */
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    border: 1px solid #4b5563; /* gray-700 */
+}
+
+.login-icon-container {
+    margin: 0 auto;
+    width: 3rem;
+    height: 3rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background-color: rgba(55, 65, 81, 0.5); /* gray-700/50 */
+}
+
+.login-input {
+    width: 100%;
+    background-color: #4b5563; /* gray-700 */
+    border: 1px solid #6b7280; /* gray-600 */
+    color: white;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    transition: all 0.15s;
+    outline: none;
+}
+.login-input:focus {
+    box-shadow: 0 0 0 2px #3b82f6; /* focus:ring-2 focus:ring-blue-500 */
+}
+
+.login-error {
+    padding: 0.75rem;
+    background-color: rgba(153, 27, 27, 0.5); /* red-900/50 */
+    border: 1px solid #b91c1c; /* red-700 */
+    color: #fca5a5; /* red-200 */
+    font-size: 0.875rem;
+    border-radius: 0.5rem;
+}
+
+/* Switch Styles */
+.switch-container {
+    position: relative;
+    width: 2.75rem; /* w-11 */
+    height: 1.5rem; /* h-6 */
+    border-radius: 9999px;
+    transition: background-color 0.2s ease-in-out;
+    flex-shrink: 0;
+    background-color: #4b5563; /* gray-600 default */
+}
+.switch-container.checked {
+    background-color: #2563eb; /* blue-600 checked */
+}
+.switch-knob {
+    position: absolute;
+    top: 0.125rem; /* top-0.5 */
+    left: 0.125rem; /* left-0.5 */
+    width: 1.25rem; /* w-5 */
+    height: 1.25rem; /* h-5 */
+    background-color: white;
+    border-radius: 9999px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transform: translateX(0);
+    transition: transform 0.2s ease-in-out;
+}
+.switch-container.checked .switch-knob {
+    transform: translateX(1.25rem); /* translate-x-5 */
+}
+
+/* Buttons */
+.button-primary {
+    width: 100%;
+    padding: 0.75rem 0;
+    margin-top: 1rem;
+    background-color: #3b82f6; /* blue-600 */
+    color: white;
+    font-weight: bold;
+    border-radius: 0.75rem;
+    transition: all 0.2s;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.25);
+}
+.button-primary:hover {
+    background-color: #2563eb; /* blue-700 */
+    transform: translateY(-1px);
+}
+.button-primary:active {
     transform: scale(0.98);
-    opacity: 0.9;
+}
+.button-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
 }
 
-/* Убираем синий хайлайт при тапе на мобилках */
-button, div {
-    -webkit-tap-highlight-color: transparent;
+.button-primary-sm {
+    padding: 0.25rem 0.75rem;
+    background-color: #9333ea; /* purple-600 */
+    color: white;
+    font-size: 0.75rem;
+    border-radius: 0.375rem;
+    transition: background-color 0.2s;
+}
+.button-primary-sm:hover:not(:disabled) {
+    background-color: #7e22ce; /* purple-700 */
+}
+.button-primary-sm:disabled {
+    opacity: 0.5;
+}
+
+/* Table Display / Cards */
+.grid-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+@media (min-width: 768px) { /* md breakpoint */
+    .grid-container {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.perevozka-card {
+    background-color: #374151; /* gray-800 */
+    border-radius: 0.75rem;
+    border: 1px solid #4b5563; /* gray-700 */
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.3s;
+}
+.perevozka-card:hover {
+    box-shadow: 0 6px 10px rgba(59, 130, 246, 0.15);
+}
+
+.card-header {
+    padding: 0.75rem;
+    background-color: #374151; /* Slightly darker header */
+    border-bottom: 1px solid #4b5563;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-body-details {
+    /* Style for TableRow containers */
+    border-top: 1px solid #4b5563;
+}
+
+/* AI Summary */
+.ai-summary-card {
+    background-color: #374151;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    border: 1px solid #4b5563;
+    margin-bottom: 1.5rem;
+}
+
+/* Status Message (Error/Mock) */
+.status-message {
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+}
+.status-message.error {
+    background-color: rgba(153, 27, 27, 0.2); /* red-900/30 */
+    border: 1px solid #b91c1c; /* red-800 */
+    color: #fca5a5; /* red-300 */
 }
