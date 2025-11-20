@@ -76,6 +76,7 @@ export default function App() {
             return;
         }
         
+        // Получаем закодированный заголовок для отправки на прокси
         const { Authorization } = getAuthHeader(cleanLogin, cleanPassword);
 
         // Используем фиксированные даты для первого запроса авторизации
@@ -85,7 +86,7 @@ export default function App() {
         try {
             setLoading(true);
             
-            // Запрос на Vercel Proxy
+            // 1. ОСНОВНОЙ ЗАПРОС К ПРОКСИ (через fetch)
             const res = await fetch(`${PROXY_API_BASE_URL}?dateFrom=${fixedDateFrom}&dateTo=${fixedDateTo}`, { 
                 method: "GET", 
                 headers: { 
@@ -127,7 +128,7 @@ export default function App() {
     };
 
 
-    // --------------- СТИЛИ (оставлены без изменений) ---------------
+    // --------------- СТИЛИ (оставлены без изменений для сохранения темы) ---------------
     const globalStyles = (
         <style>
             {`
@@ -344,7 +345,7 @@ export default function App() {
                 padding: 1.5rem 1rem;
                 display: flex;
                 justify-content: center;
-                align-items: center; 
+                align-items: center; /* Центрируем по вертикали для сообщения об успехе */
             }
             .button-primary {
                 background-color: var(--color-primary-blue);
