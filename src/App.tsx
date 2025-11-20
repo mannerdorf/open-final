@@ -1,5 +1,8 @@
 import { FormEvent, useState, useEffect } from "react"; 
-import { LogOut, Loader2, Check, X, Moon, Sun, Eye, EyeOff, Home, Truck, FileText, MessageCircle, User, RefreshCw, AlertTriangle, Download } from 'lucide-react';
+import { 
+    LogOut, Loader2, Check, X, Moon, Sun, Eye, EyeOff, Home, Truck, FileText, MessageCircle, User, 
+    RefreshCw, AlertTriangle, Download // <-- Проверьте импорты
+} from 'lucide-react';
 
 // --- ТИПЫ ДАННЫХ ---
 type AuthData = {
@@ -59,13 +62,9 @@ export default function App() {
         try {
             setLoading(true);
             
-            // 1. ОСНОВНОЙ ЗАПРОС К ПРОКСИ (через fetch) для проверки авторизации
-            // ЛОГИКА: POST + JSON BODY (старая рабочая конфигурация)
             const res = await fetch(PROXY_API_BASE_URL, { 
                 method: "POST", 
-                headers: { 
-                    'Content-Type': 'application/json' 
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     login: cleanLogin, 
                     password: cleanPassword 
@@ -84,7 +83,6 @@ export default function App() {
                 return;
             }
 
-            // УСПЕХ: Устанавливаем данные авторизации и переключаемся на вкладку "Грузы"
             setAuth({ login: cleanLogin, password: cleanPassword });
             setActiveTab("cargo"); 
             setError(null);
@@ -106,7 +104,6 @@ export default function App() {
         setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
     };
     
-    // Выбор компонента для рендеринга
     const renderContent = () => {
         if (!auth) {
             return <LoginForm 
@@ -117,12 +114,9 @@ export default function App() {
                 loading={loading} error={error}
                 showPassword={showPassword} setShowPassword={setShowPassword}
                 handleSubmit={handleSubmit}
-                // Наша кнопка переключения темы осталась в App, ее тут нет,
-                // но в LoginForm ее можно снова вывести
             />;
         }
 
-        // Рендеринг страницы в зависимости от активной вкладки
         switch (activeTab) {
             case 'cargo':
                 return <CargoPage auth={auth} />;
@@ -168,7 +162,6 @@ export default function App() {
 // --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ (вынесены для чистоты) ---
 // --------------------------------------------------------
 
-// Компонент для экрана входа
 function LoginForm({
     login, setLogin, password, setPassword,
     agreeOffer, setAgreeOffer, agreePersonal, setAgreePersonal,
@@ -217,7 +210,6 @@ function LoginForm({
                     </div>
                 </div>
 
-                {/* Переключатели */}
                 <label className="checkbox-row">
                     <span>Согласие с <a href="#" target="_blank" rel="noreferrer">публичной офертой</a></span>
                     <div 
@@ -257,19 +249,16 @@ function CargoPage({ auth }: { auth: AuthData }) {
     const [cargoList, setCargoList] = useState<CargoItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [downloading, setDownloading] = useState<string | null>(null); // State для отслеживания скачиваемого груза
+    const [downloading, setDownloading] = useState<string | null>(null); 
 
     const loadCargo = async () => {
         setError(null);
         setLoading(true);
 
         try {
-            // Запрос на получение грузов (используем ту же рабочую логику авторизации POST Body)
             const res = await fetch(PROXY_API_BASE_URL, { 
                 method: "POST", 
-                headers: { 
-                    'Content-Type': 'application/json' 
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     login: auth.login, 
                     password: auth.password 
@@ -284,7 +273,7 @@ function CargoPage({ auth }: { auth: AuthData }) {
             const data = await res.json();
             
             if (data && Array.isArray(data.Perevozki)) {
-                 // Здесь мы просто отображаем первые 10 элементов для теста
+                 // Тут вы можете отображать все данные, но для теста берем 10
                 setCargoList(data.Perevozki.slice(0, 10)); 
             } else {
                  setCargoList([]);
@@ -300,16 +289,13 @@ function CargoPage({ auth }: { auth: AuthData }) {
 
     // --- ФУНКЦИЯ СКАЧИВАНИЯ ФАЙЛА ---
     const handleDownload = async (cargoNumber: string) => {
-        setDownloading(cargoNumber); // Устанавливаем статус скачивания
+        setDownloading(cargoNumber); 
         setError(null);
         
         try {
-            // ЛОГИКА: POST + JSON BODY для прокси-функции файла
             const res = await fetch(FILE_PROXY_API_BASE_URL, { 
                 method: "POST", 
-                headers: { 
-                    'Content-Type': 'application/json' 
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     login: auth.login, 
                     password: auth.password,
@@ -319,22 +305,20 @@ function CargoPage({ auth }: { auth: AuthData }) {
             });
 
             if (!res.ok) {
+                // Если прокси вернул ошибку, читаем текст ошибки и выводим
                 const errorText = await res.text();
                 throw new Error(`Ошибка скачивания файла (${res.status}): ${errorText.substring(0, 100)}...`);
             }
             
-            // Получаем заголовки Content-Disposition
+            // Если ответ OK, обрабатываем файл
             const contentDisposition = res.headers.get('content-disposition') || `attachment; filename="document.pdf"`;
-            
-            // Получаем бинарные данные
             const blob = await res.blob();
             
-            // Создаем URL для скачивания файла
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             
-            // Извлекаем имя файла
+            // Извлечение имени файла
             const filenameMatch = contentDisposition.match(/filename="(.+?)"/);
             const filename = filenameMatch ? filenameMatch[1] : `document_${cargoNumber}.pdf`;
             
@@ -345,14 +329,14 @@ function CargoPage({ auth }: { auth: AuthData }) {
             window.URL.revokeObjectURL(url);
             
         } catch (err: any) {
+            // Выводим ошибку на экран
             setError(err.message || "Не удалось загрузить файл.");
         } finally {
-            setDownloading(null);
+            setDownloading(null); // Убираем статус загрузки
         }
     };
 
 
-    // Загрузка данных при монтировании компонента
     useEffect(() => {
         loadCargo();
     }, []);
@@ -385,8 +369,8 @@ function CargoPage({ auth }: { auth: AuthData }) {
                 <CargoCard 
                     key={index} 
                     item={item} 
-                    onDownloadClick={handleDownload} 
-                    isDownloading={downloading === item.Number}
+                    onDownloadClick={handleDownload} // <-- Передаем обработчик
+                    isDownloading={downloading === item.Number} // <-- Передаем статус
                 /> 
             ))}
         </div>
@@ -413,7 +397,6 @@ function CargoCard({ item, onDownloadClick, isDownloading }: { item: CargoItem, 
                 <span className="cargo-label">Куда:</span>
                 <span className="cargo-value">{item.CityTo}</span>
             </div>
-            {/* КНОПКА СКАЧИВАНИЯ */}
             <button 
                 className="button-download" 
                 onClick={() => onDownloadClick(item.Number)}
@@ -449,6 +432,7 @@ type TabBarProps = {
 };
 
 function TabBar({ active, onChange }: TabBarProps) {
+    // ... (код TabBar остался без изменений)
     return (
         <div className="tabbar-container">
             <TabButton label="Главная" icon={<Home className="w-5 h-5" />} active={active === "home"} onClick={() => onChange("home")} />
@@ -484,6 +468,7 @@ function TabButton({ label, icon, active, onClick }: TabButtonProps) {
 
 // ----------------- ШАПКА ПРИЛОЖЕНИЯ (Header) -----------------
 function Header({ auth, handleLogout, toggleTheme, isThemeLight }: any) {
+    // ... (код Header остался без изменений)
     return (
         <header className="app-header">
             <h1 className="header-title">
@@ -505,6 +490,7 @@ function Header({ auth, handleLogout, toggleTheme, isThemeLight }: any) {
 
 // ----------------- СТИЛИ -----------------
 function GlobalStyles() {
+    // ... (Код стилей остался без изменений, включая стили для .button-download)
     return (
         <style>
             {`
@@ -704,140 +690,4 @@ function GlobalStyles() {
             .app-header {
                 padding: 1rem;
                 background-color: var(--color-bg-secondary);
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                position: sticky;
-                top: 0;
-                z-index: 10;
-                border-bottom: 1px solid var(--color-border);
-            }
-            .app-main {
-                flex-grow: 1;
-                padding: 1.5rem 1rem 5rem; /* Дополнительный padding снизу для TabBar */
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                width: 100%;
-                max-width: 500px; /* Ограничиваем контент для лучшего вида */
-                margin: 0 auto;
-            }
-            .button-primary {
-                background-color: var(--color-primary-blue);
-                color: white;
-                padding: 0.75rem 1.5rem;
-                border-radius: 0.75rem;
-                font-weight: 600;
-                transition: background-color 0.15s;
-                border: none;
-                cursor: pointer;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            }
-             .button-secondary {
-                background-color: var(--color-bg-input);
-                color: var(--color-text-primary);
-                padding: 0.5rem 1rem;
-                border-radius: 0.5rem;
-                font-weight: 500;
-                border: 1px solid var(--color-border);
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-
-            /* TabBar Styles */
-            .tabbar-container {
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                display: flex;
-                justify-content: space-around;
-                background-color: var(--color-bg-secondary);
-                border-top: 1px solid var(--color-border);
-                padding: 0.5rem 0;
-                z-index: 20;
-            }
-            .tab-button {
-                background: none;
-                border: none;
-                min-width: 4rem;
-                padding: 0.25rem;
-            }
-
-            /* Cargo Page Styles */
-            .loading-screen, .empty-screen {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                padding: 2rem;
-                text-align: center;
-                color: var(--color-text-secondary);
-                font-size: 1rem;
-            }
-            .section-title {
-                font-size: 1.5rem;
-                font-weight: 700;
-                color: var(--color-text-primary);
-                margin-bottom: 1.5rem;
-                width: 100%;
-                text-align: left;
-            }
-            .cargo-list-container {
-                width: 100%;
-            }
-            .cargo-card {
-                background-color: var(--color-bg-card);
-                border: 1px solid var(--color-border);
-                border-radius: 0.75rem;
-                padding: 1rem;
-                margin-bottom: 1rem;
-                font-size: 0.9rem;
-            }
-            .cargo-row {
-                display: flex;
-                justify-content: space-between;
-                padding: 0.2rem 0;
-            }
-            .cargo-row.main {
-                font-weight: 700;
-                font-size: 1.1rem;
-                margin-bottom: 0.5rem;
-                border-bottom: 1px dashed var(--color-border);
-                padding-bottom: 0.5rem;
-            }
-            .cargo-label {
-                color: var(--color-text-secondary);
-            }
-            .cargo-value.status {
-                color: var(--color-primary-blue);
-            }
-            .button-download {
-                width: 100%;
-                background-color: var(--color-bg-input);
-                color: var(--color-text-primary);
-                padding: 0.75rem 1rem;
-                border-radius: 0.5rem;
-                font-weight: 600;
-                border: 1px solid var(--color-border);
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin-top: 1rem;
-                transition: background-color 0.15s;
-            }
-            .button-download:hover:not(:disabled) {
-                background-color: var(--color-bg-hover);
-            }
-            .button-download:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-            `}
-        </style>
-    );
-}
+                box-shadow: 0 2px 4px rgba(0, 0, 0
