@@ -1,5 +1,5 @@
 import { FormEvent, useState, useEffect } from "react"; 
-import { LogOut, Loader2, Check, X, Moon, Sun, Eye, EyeOff } from 'lucide-react';
+import { LogOut, Loader2, Check, X, Moon, Sun, Eye, EyeOff, Home, Truck, FileText, MessageCircle, User, RefreshCw, AlertTriangle } from 'lucide-react';
 
 // --- ТИПЫ ДАННЫХ ---
 type AuthData = {
@@ -7,16 +7,23 @@ type AuthData = {
     password: string;
 };
 
-// --- КОНФИГУРАЦИЯ ---
-// Точка входа для запросов на ваш прокси-сервер Vercel
-const PROXY_API_BASE_URL = '/api/perevozki'; 
+type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 
-// --- ФУНКЦИЯ ДЛЯ ГЕНЕРАЦИИ ДИНАМИЧЕСКОГО CURL (удалена, но оставим пустой, чтобы не удалять useEffect) ---
-const generateDynamicCurlString = (clientLogin: string, clientPassword: string): string => {
-    // Эта функция теперь не используется для отображения, но сохранена для структуры
-    return ''; 
+// --- ТИП ДАННЫХ ГРУЗА (Взято с вашего скриншота) ---
+type CargoItem = {
+    Number: string;
+    Date: string;
+    CityFrom: string;
+    CityTo: string;
+    Status: string;
+    // Добавьте другие поля по мере необходимости
 };
 
+
+// --- КОНФИГУРАЦИЯ ---
+const PROXY_API_BASE_URL = '/api/perevozki'; 
+
+// --- ОСНОВНОЙ КОМПОНЕНТ APP ---
 export default function App() {
     const [login, setLogin] = useState("order@lal-auto.com"); 
     const [password, setPassword] = useState("ZakaZ656565"); 
@@ -27,19 +34,9 @@ export default function App() {
     const [showPassword, setShowPassword] = useState(false);
     
     const [auth, setAuth] = useState<AuthData | null>(null);
+    const [activeTab, setActiveTab] = useState<Tab>("cargo"); // <-- ИЗМЕНЕНИЕ: Дефолтная вкладка после логина
     const [theme, setTheme] = useState('dark');
     const isThemeLight = theme === 'light';
-
-    // --- ДИНАМИЧЕСКОЕ СОСТОЯНИЕ ДЛЯ CURL ---
-    const [curlCommand, setCurlCommand] = useState<string>(''); 
-    
-    // --- ХУК ДЛЯ ОБНОВЛЕНИЯ CURL ---
-    // Здесь мы просто вызываем функцию, но результат (curlCommand) больше не отображается
-    useEffect(() => {
-        const dynamicCurl = generateDynamicCurlString(login.trim(), password.trim());
-        setCurlCommand(dynamicCurl);
-    }, [login, password]);
-
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -61,7 +58,7 @@ export default function App() {
         try {
             setLoading(true);
             
-            // 1. ОСНОВНОЙ ЗАПРОС К ПРОКСИ (через fetch)
+            // 1. ОСНОВНОЙ ЗАПРОС К ПРОКСИ (через fetch) для проверки авторизации
             // ЛОГИКА: POST + JSON BODY (старая рабочая конфигурация)
             const res = await fetch(PROXY_API_BASE_URL, { 
                 method: "POST", 
@@ -86,8 +83,9 @@ export default function App() {
                 return;
             }
 
-            // УСПЕХ: Устанавливаем данные авторизации
+            // УСПЕХ: Устанавливаем данные авторизации и переключаемся на вкладку "Грузы"
             setAuth({ login: cleanLogin, password: cleanPassword });
+            setActiveTab("cargo"); // <-- ИЗМЕНЕНИЕ: Переход на вкладку "cargo"
             setError(null);
         } catch (err: any) {
             setError(err?.message || "Ошибка сети. Проверьте адрес прокси.");
@@ -100,15 +98,335 @@ export default function App() {
     const handleLogout = () => {
         setAuth(null);
         setError(null);
+        setActiveTab("home");
     }
     
     const toggleTheme = () => {
         setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
     };
+    
+    // Выбор компонента для рендеринга
+    const renderContent = () => {
+        if (!auth) {
+            return <LoginForm 
+                login={login} setLogin={setLogin} 
+                password={password} setPassword={setPassword}
+                agreeOffer={agreeOffer} setAgreeOffer={setAgreeOffer}
+                agreePersonal={agreePersonal} setAgreePersonal={setAgreePersonal}
+                loading={loading} error={error}
+                showPassword={showPassword} setShowPassword={setShowPassword}
+                handleSubmit={handleSubmit}
+            />;
+        }
+
+        // Рендеринг страницы в зависимости от активной вкладки
+        switch (activeTab) {
+            case 'cargo':
+                return <CargoPage auth={auth} />;
+            case 'home':
+            case 'docs':
+            case 'support':
+            case 'profile':
+            default:
+                return <EmptyPage title={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} />;
+        }
+    };
 
 
-    // --------------- СТИЛИ ---------------
-    const globalStyles = (
+    // --------------- РЕНДЕРИНГ ПРИЛОЖЕНИЯ ---------------
+    return (
+        <div className={`app-container ${theme}-mode`}>
+            <GlobalStyles />
+            
+            {auth ? (
+                <>
+                    <Header auth={auth} handleLogout={handleLogout} toggleTheme={toggleTheme} isThemeLight={isThemeLight} />
+                    <div className="app-main">
+                        {renderContent()}
+                    </div>
+                    <TabBar active={activeTab} onChange={setActiveTab} />
+                </>
+            ) : (
+                <div className="login-form-wrapper">
+                    {renderContent()}
+                </div>
+            )}
+            
+        </div>
+    );
+}
+
+// --------------------------------------------------------
+// --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ (вынесены для чистоты) ---
+// --------------------------------------------------------
+
+// Компонент для экрана входа
+function LoginForm({
+    login, setLogin, password, setPassword,
+    agreeOffer, setAgreeOffer, agreePersonal, setAgreePersonal,
+    loading, error, showPassword, setShowPassword, handleSubmit
+}: any) {
+    const isThemeLight = useState(false); // Предполагаем, что App передает theme, но для простоты оставим
+    
+    return (
+        <div className={`login-card relative`}>
+            {/* Кнопка переключения темы (удалена из LoginForm, т.к. должна быть в App или Header) */}
+            
+            <div className="flex justify-center mb-4 h-10 mt-6">
+                <div className="logo-text">HAULZ</div>
+            </div>
+            <div className="tagline">
+                Доставка грузов в Калининград и обратно
+            </div>
+
+            <form onSubmit={handleSubmit} className="form">
+                <div className="field">
+                    <input
+                        className="login-input"
+                        type="text"
+                        placeholder="order@lal-auto.com"
+                        value={login}
+                        onChange={(e) => setLogin(e.target.value)}
+                        autoComplete="username"
+                    />
+                </div>
+
+                <div className="field">
+                    <div className="password-input-container">
+                        <input
+                            className="login-input"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Введите пароль"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="current-password"
+                        />
+                        <button 
+                            type="button" 
+                            className="toggle-password-visibility" 
+                            onClick={() => setShowPassword(!showPassword)}
+                        >
+                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Переключатели */}
+                <label className="checkbox-row">
+                    <span>Согласие с <a href="#" target="_blank" rel="noreferrer">публичной офертой</a></span>
+                    <div 
+                        className={`switch-container ${agreeOffer ? 'checked' : ''}`}
+                        onClick={() => setAgreeOffer(!agreeOffer)}
+                    >
+                        <div className="switch-knob"></div>
+                    </div>
+                </label>
+
+                <label className="checkbox-row">
+                    <span>Согласие на <a href="#" target="_blank" rel="noreferrer">обработку персональных данных</a></span>
+                    <div 
+                        className={`switch-container ${agreePersonal ? 'checked' : ''}`}
+                        onClick={() => setAgreePersonal(!agreePersonal)}
+                    >
+                        <div className="switch-knob"></div>
+                    </div>
+                </label>
+
+                <button className="button-primary mt-4 flex justify-center items-center" type="submit" disabled={loading}>
+                    {loading ? (
+                        <Loader2 className="animate-spin w-5 h-5" />
+                    ) : (
+                        "Подтвердить"
+                    )}
+                </button>
+            </form>
+
+            {error && <p className="login-error mt-4"><X className="w-5 h-5 mr-2" />{error}</p>}
+        </div>
+    );
+}
+
+// Компонент для отображения списка грузов
+function CargoPage({ auth }: { auth: AuthData }) {
+    const [cargoList, setCargoList] = useState<CargoItem[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const loadCargo = async () => {
+        setError(null);
+        setLoading(true);
+
+        try {
+            // Запрос на получение грузов (используем ту же рабочую логику авторизации POST Body)
+            const res = await fetch(PROXY_API_BASE_URL, { 
+                method: "POST", 
+                headers: { 
+                    'Content-Type': 'application/json' 
+                },
+                body: JSON.stringify({ 
+                    login: auth.login, 
+                    password: auth.password 
+                }),
+            });
+
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(`Ошибка загрузки грузов (${res.status}): ${errorText.substring(0, 100)}...`);
+            }
+            
+            const data = await res.json();
+            
+            if (data && Array.isArray(data.Perevozki)) {
+                 // Здесь мы просто отображаем первые 10 элементов для теста
+                setCargoList(data.Perevozki.slice(0, 10)); 
+            } else {
+                 setCargoList([]);
+                 setError("Неверный формат ответа API.");
+            }
+
+        } catch (err: any) {
+            setError(err.message || "Не удалось загрузить данные о грузах.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Загрузка данных при монтировании компонента
+    useEffect(() => {
+        loadCargo();
+    }, []);
+
+    if (loading) {
+        return <div className="loading-screen"><Loader2 className="animate-spin w-8 h-8 text-theme-primary" /> <p>Загрузка грузов...</p></div>;
+    }
+
+    if (error) {
+        return (
+            <div className="error-screen">
+                <AlertTriangle className="w-8 h-8 text-red-500 mb-2" />
+                <p className="text-red-500 mb-2">Ошибка при загрузке данных:</p>
+                <p className="text-sm text-theme-secondary">{error}</p>
+                <button className="button-secondary mt-4" onClick={loadCargo}>
+                    <RefreshCw className="w-4 h-4 mr-2" /> Повторить
+                </button>
+            </div>
+        );
+    }
+    
+    if (cargoList.length === 0) {
+        return <div className="empty-screen"><p>Нет активных грузов.</p></div>;
+    }
+
+    return (
+        <div className="cargo-list-container">
+             <h2 className="section-title">Активные перевозки ({cargoList.length})</h2>
+            {cargoList.map((item, index) => (
+                <CargoCard key={index} item={item} />
+            ))}
+        </div>
+    );
+}
+
+// Компонент одной карточки груза
+function CargoCard({ item }: { item: CargoItem }) {
+    return (
+        <div className="cargo-card">
+            <div className="cargo-row main">
+                <span className="cargo-value">{item.Number}</span>
+                <span className="cargo-value status">{item.Status}</span>
+            </div>
+            <div className="cargo-row">
+                <span className="cargo-label">Дата:</span>
+                <span className="cargo-value">{item.Date}</span>
+            </div>
+            <div className="cargo-row">
+                <span className="cargo-label">Откуда:</span>
+                <span className="cargo-value">{item.CityFrom}</span>
+            </div>
+            <div className="cargo-row">
+                <span className="cargo-label">Куда:</span>
+                <span className="cargo-value">{item.CityTo}</span>
+            </div>
+        </div>
+    );
+}
+
+
+// Компонент заглушка для остальных вкладок
+function EmptyPage({ title }: { title: string }) {
+    return (
+        <div className="empty-screen">
+            <h2 className="text-2xl font-bold text-theme-text mb-2">{title}</h2>
+            <p className="text-theme-secondary">Этот раздел будет реализован позже.</p>
+        </div>
+    );
+}
+
+
+// ----------------- НИЖНЕЕ МЕНЮ (TabBar) -----------------
+type TabBarProps = {
+    active: Tab;
+    onChange: (t: Tab) => void;
+};
+
+function TabBar({ active, onChange }: TabBarProps) {
+    return (
+        <div className="tabbar-container">
+            <TabButton label="Главная" icon={<Home className="w-5 h-5" />} active={active === "home"} onClick={() => onChange("home")} />
+            <TabButton label="Грузы" icon={<Truck className="w-5 h-5" />} active={active === "cargo"} onClick={() => onChange("cargo")} />
+            <TabButton label="Документы" icon={<FileText className="w-5 h-5" />} active={active === "docs"} onClick={() => onChange("docs")} />
+            <TabButton label="Поддержка" icon={<MessageCircle className="w-5 h-5" />} active={active === "support"} onClick={() => onChange("support")} />
+            <TabButton label="Профиль" icon={<User className="w-5 h-5" />} active={active === "profile"} onClick={() => onChange("profile")} />
+        </div>
+    );
+}
+
+type TabButtonProps = {
+    label: string;
+    icon: React.ReactNode;
+    active: boolean;
+    onClick: () => void;
+};
+
+function TabButton({ label, icon, active, onClick }: TabButtonProps) {
+    const activeClass = active ? 'text-theme-primary' : 'text-theme-secondary';
+    const hoverClass = 'hover:bg-theme-hover-bg';
+    
+    return (
+        <button
+            className={`tab-button flex flex-col items-center justify-center p-2 rounded-lg text-sm font-medium transition-colors ${activeClass} ${hoverClass}`}
+            onClick={onClick}
+        >
+            <span className="tab-icon mb-0.5">{icon}</span>
+            <span className="text-xs">{label}</span>
+        </button>
+    );
+}
+
+// ----------------- ШАПКА ПРИЛОЖЕНИЯ (Header) -----------------
+function Header({ auth, handleLogout, toggleTheme, isThemeLight }: any) {
+    return (
+        <header className="app-header">
+            <h1 className="header-title">
+                <span className="logo-text text-theme-primary" style={{ fontSize: '1.5rem', margin: 0 }}>HAULZ</span>
+            </h1>
+            <div className="flex items-center space-x-3">
+                <span className="text-xs text-theme-secondary hidden sm:inline">{auth.login}</span>
+                <button className="theme-toggle-button" onClick={toggleTheme} title="Переключить тему">
+                    {isThemeLight ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
+                </button>
+                <button className="theme-toggle-button" onClick={handleLogout} title="Выйти">
+                    <LogOut className="w-5 h-5 text-red-500" />
+                </button>
+            </div>
+        </header>
+    );
+}
+
+
+// ----------------- СТИЛИ -----------------
+function GlobalStyles() {
+    return (
         <style>
             {`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
@@ -132,7 +450,6 @@ export default function App() {
                 --color-text-primary: #e5e7eb; 
                 --color-text-secondary: #9ca3af; 
                 --color-border: #4b5563; 
-                --color-ai-bg: rgba(75, 85, 99, 0.5);
                 --color-primary-blue: #5b7efc; 
                 --color-error-bg: rgba(185, 28, 28, 0.1);
                 --color-error-border: #b91c1c;
@@ -153,7 +470,6 @@ export default function App() {
                 --color-text-primary: #1f2937;
                 --color-text-secondary: #6b7280;
                 --color-border: #e5e7eb;
-                --color-ai-bg: #f3f4f6;
                 --color-primary-blue: #2563eb;
                 --color-error-bg: #fee2e2;
                 --color-error-border: #fca5a5;
@@ -173,13 +489,6 @@ export default function App() {
                 flex-direction: column;
                 transition: background-color 0.3s, color 0.3s;
             }
-            
-            /* Custom utility classes */
-            .text-theme-text { color: var(--color-text-primary); }
-            .text-theme-secondary { color: var(--color-text-secondary); }
-            .text-theme-primary { color: var(--color-primary-blue); }
-            .border-theme-border { border-color: var(--color-border); }
-            .hover\\:bg-theme-hover-bg:hover { background-color: var(--color-bg-hover); }
 
             /* Login screen styles */
             .login-form-wrapper {
@@ -188,11 +497,11 @@ export default function App() {
                 justify-content: center;
                 align-items: center;
                 padding: 2rem;
+                width: 100%;
             }
             .login-card {
                 max-width: 28rem;
                 width: 100%;
-                margin: 0 auto;
                 background-color: var(--color-bg-card);
                 padding: 2.5rem;
                 border-radius: 1rem;
@@ -228,13 +537,8 @@ export default function App() {
                 transition: all 0.15s;
                 outline: none;
             }
-            .login-input:focus {
-                box-shadow: 0 0 0 2px var(--color-primary-blue);
-                border-color: var(--color-primary-blue);
-            }
             .password-input-container {
                 position: relative;
-                width: 100%;
             }
             .toggle-password-visibility {
                 position: absolute;
@@ -251,11 +555,8 @@ export default function App() {
                 justify-content: center;
                 z-index: 10;
             }
-            .toggle-password-visibility:hover {
-                color: var(--color-primary-blue);
-            }
 
-            .login-error {
+            .login-error, .error-screen {
                 padding: 0.75rem;
                 background-color: var(--color-error-bg);
                 border: 1px solid var(--color-error-border);
@@ -265,6 +566,14 @@ export default function App() {
                 margin-top: 1rem;
                 display: flex;
                 align-items: center;
+                text-align: left;
+            }
+            .error-screen {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                padding: 1.5rem;
+                margin-top: 0;
             }
 
             /* Switch/Tumbler styles */
@@ -311,7 +620,7 @@ export default function App() {
                 transform: translateX(1.25rem); 
             }
 
-            /* Other styles (header, cards, etc.) */
+            /* Header, Main and Buttons */
             .app-header {
                 padding: 1rem;
                 background-color: var(--color-bg-secondary);
@@ -326,10 +635,13 @@ export default function App() {
             }
             .app-main {
                 flex-grow: 1;
-                padding: 1.5rem 1rem;
+                padding: 1.5rem 1rem 5rem; /* Дополнительный padding снизу для TabBar */
                 display: flex;
-                justify-content: center;
-                align-items: center; 
+                flex-direction: column;
+                align-items: center;
+                width: 100%;
+                max-width: 500px; /* Ограничиваем контент для лучшего вида */
+                margin: 0 auto;
             }
             .button-primary {
                 background-color: var(--color-primary-blue);
@@ -342,187 +654,88 @@ export default function App() {
                 cursor: pointer;
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             }
-            .button-primary:hover:not(:disabled) {
-                background-color: #4c6ee5; 
+             .button-secondary {
+                background-color: var(--color-bg-input);
+                color: var(--color-text-primary);
+                padding: 0.5rem 1rem;
+                border-radius: 0.5rem;
+                font-weight: 500;
+                border: 1px solid var(--color-border);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
-            .button-primary:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
+
+            /* TabBar Styles */
+            .tabbar-container {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                display: flex;
+                justify-content: space-around;
+                background-color: var(--color-bg-secondary);
+                border-top: 1px solid var(--color-border);
+                padding: 0.5rem 0;
+                z-index: 20;
             }
-            .theme-toggle-button {
+            .tab-button {
                 background: none;
                 border: none;
-                color: var(--color-text-secondary);
-                cursor: pointer;
-                padding: 0.5rem;
-                border-radius: 50%;
-                transition: background-color 0.15s;
-            }
-            .theme-toggle-button:hover {
-                background-color: var(--color-bg-hover);
-            }
-            .curl-display {
-                background-color: var(--color-bg-secondary);
-                border: 1px solid var(--color-border);
-                border-radius: 0.5rem;
-                padding: 0.75rem;
-                margin-top: 1.5rem;
-                font-family: monospace;
-                font-size: 0.8rem;
-                white-space: pre-wrap;
-                word-break: break-all;
-                color: var(--color-text-secondary);
-                position: relative;
-            }
-            .curl-display strong {
-                color: var(--color-text-primary);
+                min-width: 4rem;
+                padding: 0.25rem;
             }
 
+            /* Cargo Page Styles */
+            .loading-screen, .empty-screen {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 2rem;
+                text-align: center;
+                color: var(--color-text-secondary);
+                font-size: 1rem;
+            }
+            .section-title {
+                font-size: 1.5rem;
+                font-weight: 700;
+                color: var(--color-text-primary);
+                margin-bottom: 1.5rem;
+                width: 100%;
+                text-align: left;
+            }
+            .cargo-list-container {
+                width: 100%;
+            }
+            .cargo-card {
+                background-color: var(--color-bg-card);
+                border: 1px solid var(--color-border);
+                border-radius: 0.75rem;
+                padding: 1rem;
+                margin-bottom: 1rem;
+                font-size: 0.9rem;
+            }
+            .cargo-row {
+                display: flex;
+                justify-content: space-between;
+                padding: 0.2rem 0;
+            }
+            .cargo-row.main {
+                font-weight: 700;
+                font-size: 1.1rem;
+                margin-bottom: 0.5rem;
+                border-bottom: 1px dashed var(--color-border);
+                padding-bottom: 0.5rem;
+            }
+            .cargo-label {
+                color: var(--color-text-secondary);
+            }
+            .cargo-value.status {
+                color: var(--color-primary-blue);
+            }
             `}
         </style>
-    );
-
-    // --------------- ЭКРАН АВТОРИЗАЦИИ (Login Form) ---------------
-    if (!auth) {
-        return (
-            <>
-            {globalStyles}
-            
-            <div className={`app-container ${theme}-mode login-form-wrapper`}>
-                <div className={`login-card relative`}>
-                    {/* Кнопка переключения темы */}
-                    <div className="theme-toggle-container absolute top-4 right-4">
-                        <button className="theme-toggle-button" onClick={toggleTheme}>
-                            {isThemeLight ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-                        </button>
-                    </div>
-
-                    <div className="flex justify-center mb-4 h-10 mt-6">
-                        <div className="logo-text">HAULZ</div>
-                    </div>
-                    <div className="tagline">
-                        Доставка грузов в Калининград и обратно
-                    </div>
-
-                    <form onSubmit={handleSubmit} className="form">
-                        <div className="field">
-                            <input
-                                className="login-input"
-                                type="text"
-                                placeholder="order@lal-auto.com"
-                                value={login}
-                                onChange={(e) => setLogin(e.target.value)}
-                                autoComplete="username"
-                                style={{paddingRight: '0.75rem'}} 
-                            />
-                        </div>
-
-                        <div className="field">
-                            <div className="password-input-container">
-                                <input
-                                    className="login-input"
-                                    type={showPassword ? "text" : "password"}
-                                    placeholder="Введите пароль"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    autoComplete="current-password"
-                                />
-                                <button 
-                                    type="button" 
-                                    className="toggle-password-visibility" 
-                                    onClick={() => setShowPassword(!showPassword)}
-                                >
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Переключатель "Согласие с публичной офертой" */}
-                        <label className="checkbox-row">
-                            <span>
-                                Согласие с{" "}
-                                <a href="#" target="_blank" rel="noreferrer">
-                                    публичной офертой
-                                </a>
-                            </span>
-                            <div 
-                                className={`switch-container ${agreeOffer ? 'checked' : ''}`}
-                                onClick={() => setAgreeOffer(!agreeOffer)}
-                            >
-                                <div className="switch-knob"></div>
-                            </div>
-                        </label>
-
-                        {/* Переключатель "Согласие на обработку персональных данных" */}
-                        <label className="checkbox-row">
-                            <span>
-                                Согласие на{" "}
-                                <a href="#" target="_blank" rel="noreferrer">
-                                    обработку персональных данных
-                                </a>
-                            </span>
-                            <div 
-                                className={`switch-container ${agreePersonal ? 'checked' : ''}`}
-                                onClick={() => setAgreePersonal(!agreePersonal)}
-                            >
-                                <div className="switch-knob"></div>
-                            </div>
-                        </label>
-
-                        {/* Кнопка "Подтвердить" */}
-                        <button className="button-primary mt-4 flex justify-center items-center" type="submit" disabled={loading}>
-                            {loading ? (
-                                <Loader2 className="animate-spin w-5 h-5" />
-                            ) : (
-                                "Подтвердить"
-                            )}
-                        </button>
-                    </form>
-
-                    {error && <p className="login-error mt-4"><X className="w-5 h-5 mr-2" />{error}</p>}
-                    
-                    {/* Блок CURL-запроса удален */}
-                </div>
-            </div>
-            </>
-        );
-    }
-
-    // --------------- ЭКРАН УСПЕШНОЙ АВТОРИЗАЦИИ ---------------
-    return (
-        <div className={`app-container ${theme}-mode`}>
-            {globalStyles}
-            
-            <header className="app-header">
-                <h1 className="header-title">
-                    <span className="logo-text text-theme-primary" style={{ fontSize: '1.5rem', margin: 0 }}>HAULZ</span>
-                </h1>
-                <div className="flex items-center space-x-3">
-                    <button className="theme-toggle-button" onClick={toggleTheme} title="Переключить тему">
-                        {isThemeLight ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
-                    </button>
-                    <button className="theme-toggle-button" onClick={handleLogout} title="Выйти">
-                        <LogOut className="w-5 h-5 text-red-500" />
-                    </button>
-                </div>
-            </header>
-
-            <div className="app-main">
-                <div className="w-full max-w-lg p-6 bg-[var(--color-bg-card)] rounded-xl shadow-xl text-center border border-theme-border">
-                    <Check className="w-16 h-16 mx-auto mb-4 text-green-500" />
-                    <h2 className="text-3xl font-bold text-theme-text mb-2">Авторизация прошла успешно!</h2>
-                    <p className="text-theme-secondary mb-4">
-                        Учетные данные для пользователя **{auth.login}** подтверждены.
-                    </p>
-                    <p className="text-sm text-theme-secondary mb-6">
-                        Это сообщение отображается после успешного запроса к API.
-                    </p>
-                    <button className="button-primary" onClick={handleLogout}>
-                        <LogOut className="w-4 h-4 mr-2 inline-block" /> Выйти и проверить снова
-                    </button>
-                </div>
-            </div>
-            
-        </div>
     );
 }
