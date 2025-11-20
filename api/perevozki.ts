@@ -1,31 +1,30 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import axios from 'axios';
-import { URLSearchParams } from 'url'; // Импортируем для надежного построения строки параметров
 
-// --- КОНФИГУРАЦИЯ ВНЕШНЕГО API (Только базовый URL) ---
+// --- КОНФИГУРАЦИЯ ВНЕШНЕГО API ---
 const EXTERNAL_API_BASE_URL = 'https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki';
 
 // --- СЛУЖЕБНЫЕ ДАННЫЕ ДЛЯ АВТОРИЗАЦИИ ПРОКСИ В 1С (ЗАШИТЫЕ) ---
 const ADMIN_AUTH_BASE64 = 'YWRtaW46anVlYmZueWU=';
 const ADMIN_AUTH_HEADER = `Basic ${ADMIN_AUTH_BASE64}`;
 
+// --- ЖЁСТКИЕ РАБОЧИЕ ДАТЫ ИЗ ВАШЕГО CURL/POSTMAN ---
+const WORKING_QUERY_PARAMS = '?DateB=2024-12-11&DateE=2026-01-01'; 
+
 /**
- * Обработчик для прокси-запросов.
- * Исправлена логика получения Query Parameters с использованием req.query.
+ * Обработчик для прокси-запросов (Временно с захардкоженными рабочими датами).
  */
 export default async function handler(
     req: VercelRequest,
     res: VercelResponse,
 ) {
     if (req.method !== 'GET') {
-        console.log(`Method Not Allowed: ${req.method}`);
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
     const clientAuthHeader = req.headers.authorization;
 
     if (!clientAuthHeader || !clientAuthHeader.startsWith('Basic ')) {
-        console.log('Authorization header missing or invalid format.');
         return res.status(401).json({ error: 'Authorization required' });
     }
 
@@ -35,43 +34,24 @@ export default async function handler(
         const decoded = Buffer.from(clientAuthBase64, 'base64').toString();
         const [clientLogin] = decoded.split(":");
         
-        // --- ИСПРАВЛЕНИЕ: Использование req.query для надежного получения параметров ---
-        // 1. Создаем объект URLSearchParams из req.query
-        const params = new URLSearchParams(req.query as Record<string, string>);
-        
-        // 2. ВАЖНО: Переименовываем параметры клиента в формат, который ожидает 1С
-        // Фронтенд: dateFrom, dateTo
-        // 1С: DateB, DateE
-        const dateFrom = params.get('dateFrom');
-        const dateTo = params.get('dateTo');
-        
-        if (dateFrom) {
-            params.delete('dateFrom');
-            params.set('DateB', dateFrom); 
-        }
-        if (dateTo) {
-            params.delete('dateTo');
-            params.set('DateE', dateTo);
-        }
-        
-        // 3. Формируем финальный URL
-        const externalUrl = `${EXTERNAL_API_BASE_URL}?${params.toString()}`;
+        // --- ИСПОЛЬЗУЕМ РАБОЧИЙ URL ИЗ POSTMAN ---
+        const externalUrl = `${EXTERNAL_API_BASE_URL}${WORKING_QUERY_PARAMS}`;
 
-        // --- ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ ---
-        console.log("PEREVOZKI GET CALL - DUAL AUTH MODE", {
+        console.log("PEREVOZKI GET CALL - FINAL DEBUG VERSION", {
             ClientLoginDecoded: clientLogin, 
-            AdminAuthSentAs_Authorization_Header: ADMIN_AUTH_HEADER, 
             ClientAuthSentAs_Auth_Header: `Basic ${clientAuthBase64}`, 
             TargetURL: externalUrl, // Проверьте этот URL в логах!
-            ClientQueryReceived: req.query,
-            FinalQuerySentTo1C: params.toString(),
+            Message: "Используются рабочие даты из Postman. Проверяем, что проблема не в передаче Query Params."
         });
-        // --------------------------------------------------------
 
         const response = await axios.get(externalUrl, {
             headers: {
+                // 1. СЛУЖЕБНЫЙ ЗАГОЛОВОК
                 'Authorization': ADMIN_AUTH_HEADER, 
+                
+                // 2. КЛИЕНТСКИЙ ЗАГОЛОВОК
                 'Auth': `Basic ${clientAuthBase64}`, 
+                
                 'Accept-Encoding': 'identity', 
             },
             timeout: 15000, 
@@ -84,7 +64,7 @@ export default async function handler(
         
         if (axios.isAxiosError(error) && error.response) {
             console.error('External API Response Status:', error.response.status);
-            // Если 1С вернул 401, возвращаем клиенту 401
+            // Если 1С вернул ошибку, прокси возвращает ее статус (401 или 500)
             return res.status(error.response.status).json(error.response.data || { error: 'External API Error' });
         }
 
