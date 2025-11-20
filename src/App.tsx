@@ -13,11 +13,12 @@ type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 // Точка входа для запросов на ваш прокси-сервер Vercel
 const PROXY_API_BASE_URL = '/api/perevozki'; 
 
-// --- КОНСТАНТЫ ДЛЯ ОТОБРАЖЕНИЯ CURL ---
-// Эти константы используются ТОЛЬКО для демонстрации CURL-строки,
-// а фактическая логика Dual Auth происходит в прокси-файле.
-const ADMIN_AUTH_BASE64_FOR_CURL = 'YWRtaW46anVlYmZueWU='; 
-const EXTERNAL_API_BASE_URL_FOR_CURL = 'https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki';
+// --- ЭТАЛОННАЯ КОНСТАНТА ДЛЯ ОТОБРАЖЕНИЯ CURL ---
+// ЭТО ТОЧНО ТА ЖЕ СТРОКА, КОТОРУЮ ВЫ ПРЕДОСТАВИЛИ.
+const STATIC_CURL_COMMAND = `curl --location 'https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki?DateB=2024-12-11&DateE=2026-01-01' \\
+  --header 'Auth: Basic order@lal-auto.com:ZakaZ656565' \\
+  --header 'Authorization: Basic YWRtaW46anVlYmZueWU='`;
+
 
 // --- ФУНКЦИЯ ДЛЯ BASIC AUTH ---
 // Фронтенд всегда должен кодировать логин:пароль, отправляя его в прокси
@@ -45,17 +46,9 @@ export default function App() {
     const [theme, setTheme] = useState('dark');
     const isThemeLight = theme === 'light';
 
-    // --- НОВОЕ СОСТОЯНИЕ ДЛЯ CURL ---
-    const [curlCommand, setCurlCommand] = useState<string>('');
+    // --- ИСПОЛЬЗУЕМ ЭТАЛОННУЮ СТРОКУ ПО УМОЛЧАНИЮ ---
+    const [curlCommand, setCurlCommand] = useState<string>(STATIC_CURL_COMMAND);
     
-    // Функция для генерации curl команды
-    const generateCurlString = (authHeaderValue: string) => {
-        // Мы показываем, какой запрос уйдет с фронтенда на Vercel (PROXY)
-        return `curl --location --request GET '${PROXY_API_BASE_URL}?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD' \\
-  --header 'Authorization: ${authHeaderValue}' \\
-  --header 'Content-Type: application/json'`;
-    }
-
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -73,19 +66,18 @@ export default function App() {
             return;
         }
         
-        const { Authorization, encodedCredentials } = getAuthHeader(cleanLogin, cleanPassword);
+        // Получаем закодированный заголовок для отправки на прокси
+        const { Authorization } = getAuthHeader(cleanLogin, cleanPassword);
 
-        // 1. Сгенерировать и показать CURL команду, используя фактический заголовок
-        const clientAuthValue = `Basic ${encodedCredentials}`;
-        setCurlCommand(generateCurlString(clientAuthValue));
-        
+        // Используем фиксированные даты для первого запроса авторизации (это не влияет на CURL)
+        const fixedDateFrom = '2024-01-01';
+        const fixedDateTo = '2025-01-01';
         
         try {
             setLoading(true);
             
-            // 2. ОСНОВНОЙ ЗАПРОС К ПРОКСИ (через fetch)
-            // Здесь мы используем URL прокси, а заголовки авторизации клиента
-            const res = await fetch(`${PROXY_API_BASE_URL}?dateFrom=2024-01-01&dateTo=2025-01-01`, { 
+            // 1. ОСНОВНОЙ ЗАПРОС К ПРОКСИ (через fetch)
+            const res = await fetch(`${PROXY_API_BASE_URL}?dateFrom=${fixedDateFrom}&dateTo=${fixedDateTo}`, { 
                 method: "GET", 
                 headers: { 
                     'Authorization': Authorization, // Передаем закодированные данные
@@ -120,7 +112,7 @@ export default function App() {
         setAuth(null);
         setActiveTab("cargo");
         setError(null);
-        setCurlCommand(''); // Очищаем команду при выходе
+        setCurlCommand(STATIC_CURL_COMMAND); // Возвращаем эталонную команду при выходе
     }
     
     const toggleTheme = () => {
@@ -135,7 +127,7 @@ export default function App() {
             {/* Ваши стили */}
             <style>
                 {`
-                /* ... (Ваши стили без изменений) ... */
+                /* ... (Стили без изменений) ... */
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
                 
                 * {
@@ -541,13 +533,11 @@ export default function App() {
 
                     {error && <p className="login-error mt-4"><X className="w-5 h-5 mr-2" />{error}</p>}
                     
-                    {/* --- НОВОЕ ПОЛЕ ДЛЯ ОТОБРАЖЕНИЯ CURL --- */}
-                    {curlCommand && (
-                        <div className="curl-display">
-                            <strong className="text-xs block mb-1">CURL (Frontend → Vercel Proxy)</strong>
-                            <pre>{curlCommand}</pre>
-                        </div>
-                    )}
+                    {/* --- ПОЛЕ ДЛЯ ОТОБРАЖЕНИЯ ЭТАЛОННОГО CURL --- */}
+                    <div className="curl-display">
+                        <strong className="text-xs block mb-1">Эталонный CURL (Vercel Proxy → Внешний API 1С)</strong>
+                        <pre>{curlCommand}</pre>
+                    </div>
                     {/* -------------------------------------- */}
                 </div>
             </div>
@@ -590,7 +580,6 @@ export default function App() {
 }
 
 // ----------------- КОМПОНЕНТ С ГРУЗАМИ -----------------
-// ... (Остальная часть кода CargoPage, StubPage, TabBar и TabButton остается прежней)
 
 type CargoPageProps = { 
     auth: AuthData; 
@@ -661,7 +650,7 @@ function CargoPage({ auth }: CargoPageProps) {
                 // --- ИСПОЛЬЗУЕТСЯ МЕТОД GET ---
                 const url = `${PROXY_API_BASE_URL}?${queryParams}`;
                 
-                // ВАЖНО: Мы снова генерируем заголовок, так как это новая функция
+                // ВАЖНО: Мы снова генерируем заголовок для фактического запроса
                 const { Authorization } = getAuthHeader(login, password);
 
                 const res = await fetch(url, {
@@ -678,7 +667,6 @@ function CargoPage({ auth }: CargoPageProps) {
                     if (res.status === 401) {
                         message = "Ошибка авторизации (401). Проверьте логин и пароль.";
                     }
-                    // Если прокси вернул 500, сообщение будет: Ошибка загрузки: 500. Убедитесь...
                     setError(message);
                     setItems([]);
                     setSummaryLoading(false);
