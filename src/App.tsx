@@ -28,7 +28,7 @@ const DEFAULT_PASSWORD = "ZakaZ656565";
 // Получаем текущую дату в формате YYYY-MM-DD
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-// Получаем дату, отстоящую на ШЕСТЬ МЕСЯЦЕВ назад (ИСПРАВЛЕНО)
+// Получаем дату, отстоящую на ШЕСТЬ МЕСЯЦЕВ назад
 const getSixMonthsAgoDate = () => {
     const d = new Date();
     // Устанавливаем месяц 6 месяцев назад
@@ -254,8 +254,125 @@ export default function App() {
             display: flex;
             align-items: center;
         }
-        /* --- LOGIN/SWITCH/BUTTONS/HEADER (пропущены для краткости, они остались прежними) --- */
+        
+        /* --------------------------------- */
+        /* --- LOGIN PAGE STYLES --- */
+        /* --------------------------------- */
+        .login-form-wrapper {
+            padding: 2rem 1rem;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            padding: 1.5rem;
+            background-color: var(--color-bg-card);
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+            position: relative;
+            border: 1px solid var(--color-border);
+        }
+        .logo-text {
+            font-size: 2rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            color: var(--color-primary-blue);
+        }
+        .tagline {
+            font-size: 1rem;
+            color: var(--color-text-secondary);
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        .form .field {
+            margin-bottom: 1rem;
+        }
+        
+        /* --------------------------------- */
+        /* --- PASSWORD INPUT FIX (NEW/FIXED STYLES) --- */
+        /* --------------------------------- */
+        .password-input-container {
+            position: relative; 
+            width: 100%;
+        }
+        .login-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            padding-right: 3rem; /* Отступ справа для иконки */
+            border-radius: 0.75rem;
+            border: 1px solid var(--color-border);
+            background-color: var(--color-bg-input);
+            color: var(--color-text-primary);
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .login-input:focus {
+            border-color: var(--color-primary-blue);
+        }
+        .toggle-password-visibility {
+            position: absolute;
+            right: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--color-text-secondary);
+            padding: 0;
+            display: flex; 
+            align-items: center;
+            justify-content: center;
+        }
+        .toggle-password-visibility:hover {
+             color: var(--color-primary-blue);
+        }
+        
+        /* --------------------------------- */
+        /* --- SWITCH (Tumbler) STYLES --- */
+        /* --------------------------------- */
+        .checkbox-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.875rem;
+            color: var(--color-text-secondary);
+            margin-bottom: 0.75rem;
+        }
+        .checkbox-row a {
+            color: var(--color-primary-blue);
+            text-decoration: none;
+        }
+        .switch-container {
+            width: 40px;
+            height: 22px;
+            background-color: var(--color-tumbler-bg-off);
+            border-radius: 11px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            flex-shrink: 0;
+        }
+        .switch-container.checked {
+            background-color: var(--color-tumbler-bg-on);
+        }
+        .switch-knob {
+            width: 18px;
+            height: 18px;
+            background-color: var(--color-tumbler-knob);
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s, background-color 0.3s;
+        }
+        .switch-container.checked .switch-knob {
+            transform: translateX(18px);
+        }
 
+        /* --------------------------------- */
+        /* --- BUTTONS & HEADER --- */
+        /* --------------------------------- */
         .button-primary {
             background-color: var(--color-primary-blue);
             color: white;
@@ -484,9 +601,53 @@ export default function App() {
         .modal-button-container {
             margin-top: 1.5rem;
         }
+
+        /* --------------------------------- */
+        /* --- TAB BAR (BOTTOM MENU) --- */
+        /* --------------------------------- */
+        .tabbar-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            background-color: var(--color-bg-secondary);
+            padding: 0.5rem 0;
+            box-shadow: 0 -4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 20;
+            border-top: 1px solid var(--color-border);
+        }
+        .tab-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.5rem 0.25rem;
+            min-width: 60px;
+            transition: color 0.15s;
+        }
+        .tab-button .tab-icon {
+            color: var(--color-text-secondary);
+            transition: color 0.15s;
+        }
+        .tab-button .tab-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            transition: color 0.15s;
+            margin-top: 2px;
+        }
+        .tab-button.active .tab-icon,
+        .tab-button.active .tab-label {
+            color: var(--color-primary-blue);
+        }
     `;
 
-    // --------------- ЭКРАН АВТОРИЗАЦИИ (пропущен для краткости) ---------------
+    // --------------- ЭКРАН АВТОРИЗАЦИИ ---------------
     if (!auth) {
         return (
             <>
@@ -520,6 +681,7 @@ export default function App() {
                         </div>
 
                         <div className="field">
+                            {/* КОНТЕЙНЕР ДЛЯ ФИКСА ГЛАЗИКА */}
                             <div className="password-input-container">
                                 <input
                                     className="login-input"
@@ -693,7 +855,7 @@ function FilterDialog({ isOpen, onClose, dateFrom, dateTo, onApply }: FilterDial
 }
 
 
-// ----------------- КОМПОНЕНТ С ГРУЗАМИ (CargoPage - ОБНОВЛЕНО) -----------------
+// ----------------- КОМПОНЕНТ С ГРУЗАМИ (CargoPage) -----------------
 
 type CargoPageProps = { auth: AuthData };
 
@@ -894,7 +1056,7 @@ function CargoPage({ auth }: CargoPageProps) {
     );
 }
 
-// ----------------- ЗАГЛУШКИ ДЛЯ ДРУГИХ ВКЛАДОК (пропущены для краткости) -----------------
+// ----------------- ЗАГЛУШКИ ДЛЯ ДРУГИХ ВКЛАДОК -----------------
 
 function StubPage({ title }: { title: string }) {
     return (
@@ -909,7 +1071,7 @@ function StubPage({ title }: { title: string }) {
     );
 }
 
-// ----------------- НИЖНЕЕ МЕНЮ (TabBar - пропущено для краткости) -----------------
+// ----------------- НИЖНЕЕ МЕНЮ (TabBar) -----------------
 
 type TabBarProps = {
     active: Tab;
@@ -921,31 +1083,31 @@ function TabBar({ active, onChange }: TabBarProps) {
         <div className="tabbar-container">
             <TabButton
                 label="Главная"
-                icon={<Home />}
+                icon={<Home className="w-5 h-5" />}
                 active={active === "home"}
                 onClick={() => onChange("home")}
             />
             <TabButton
                 label="Грузы"
-                icon={<Truck />}
+                icon={<Truck className="w-5 h-5" />}
                 active={active === "cargo"}
                 onClick={() => onChange("cargo")}
             />
             <TabButton
                 label="Документы"
-                icon={<FileText />}
+                icon={<FileText className="w-5 h-5" />}
                 active={active === "docs"}
                 onClick={() => onChange("docs")}
             />
             <TabButton
                 label="Поддержка"
-                icon={<MessageCircle />}
+                icon={<MessageCircle className="w-5 h-5" />}
                 active={active === "support"}
                 onClick={() => onChange("support")}
             />
             <TabButton
                 label="Профиль"
-                icon={<User />}
+                icon={<User className="w-5 h-5" />}
                 active={active === "profile"}
                 onClick={() => onChange("profile")}
             />
