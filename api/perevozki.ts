@@ -1,104 +1,108 @@
-import React from 'react';
-import { Truck, MapPin, DollarSign, Calendar, Clock, Loader2 } from 'lucide-react';
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { Buffer } from "buffer"; 
 
-/**
- * Вспомогательный компонент для форматирования строки таблицы.
- */
-const TableRow = ({ label, value, icon, className = '' }) => (
-    <div className={`flex items-center space-x-3 p-3 border-b border-gray-700 last:border-b-0 ${className}`}>
-        <div className="flex-shrink-0 text-blue-400">
-            {icon}
-        </div>
-        <div className="flex-grow">
-            <p className="text-xs font-medium text-gray-500 uppercase">{label}</p>
-            <p className="text-sm font-semibold text-gray-200 break-words">{value || 'N/A'}</p>
-        </div>
-    </div>
-);
+const BASE_URL =
+  "https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki";
 
-/**
- * Компонент для отображения данных о перевозках в виде адаптивной таблицы/списка.
- */
-const TableDisplay = ({ data, loading, error }) => {
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center p-10 bg-gray-800 rounded-xl">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                <p className="mt-3 text-gray-400">Загрузка данных о перевозках...</p>
-            </div>
-        );
+// сервисный Basic-auth (должен быть закодирован в Base64)
+const SERVICE_AUTH = "Basic YWRtaW46anVlYmZueWU=";
+
+// Определяем тип для ожидаемого тела запроса
+interface RequestBody {
+  login?: string;
+  password?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // Разбираем body и приводим к нужному типу
+  let body: RequestBody;
+  if (typeof req.body === "string") {
+    try {
+      body = JSON.parse(req.body);
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON body" });
+    }
+  } else {
+    body = req.body || {};
+  }
+
+  const {
+    login,
+    password,
+    dateFrom = "2024-01-01",
+    dateTo = "2026-01-01",
+  } = body;
+
+  const cleanLogin = (login || "").trim();
+  const cleanPassword = (password || "").trim();
+
+  if (!cleanLogin || !cleanPassword) {
+    return res.status(400).json({ error: "login and password are required" });
+  }
+
+  // Логирование (без чувствительных данных)
+  console.log("PEREVOZKI AUTH CALL", {
+    login: cleanLogin,
+    ua: req.headers["user-agent"],
+  });
+
+  const url = new URL(BASE_URL);
+  url.searchParams.set("DateB", dateFrom);
+  url.searchParams.set("DateE", dateTo);
+
+  // --- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Base64 кодирование пользовательских данных ---
+  // API 1С ожидает Basic Auth, где данные пользователя закодированы в Base64.
+  const userAuthBase64 = Buffer.from(`${cleanLogin}:${cleanPassword}`).toString(
+    "base64"
+  );
+
+  try {
+    const upstream = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        // Заголовок с пользовательским Basic Auth
+        Auth: `Basic ${userAuthBase64}`,
+        // Заголовок с сервисным Basic Auth для доступа к прокси
+        Authorization: SERVICE_AUTH, 
+      },
+    });
+
+    const text = await upstream.text();
+
+    console.log("PEREVOZKI AUTH RESPONSE", {
+      status: upstream.status,
+      ok: upstream.ok,
+      bodyPreview: text.slice(0, 200),
+    });
+
+    if (!upstream.ok) {
+      // Возвращаем статус и текст из 1С как есть
+      return res
+        .status(upstream.status)
+        .send(text || `Upstream error: ${upstream.status}`);
     }
 
-    if (error) {
-        return (
-            <div className="p-6 bg-red-900/30 border border-red-700 rounded-xl">
-                <h3 className="text-lg font-bold text-red-400">Ошибка загрузки данных</h3>
-                <p className="mt-2 text-sm text-red-300 break-all">
-                    Произошла ошибка при запросе к API: {error}
-                </p>
-                <p className="mt-3 text-xs text-red-500">
-                    Убедитесь, что логин и пароль верны, и API доступен.
-                </p>
-            </div>
-        );
+    // Если 1С вернул JSON — пробуем распарсить
+    try {
+      const json = JSON.parse(text);
+      return res.status(200).json(json);
+    } catch {
+      // Не JSON — возвращаем текст как есть
+      return res.status(200).send(text);
     }
-
-    if (!data || data.length === 0) {
-        return (
-            <div className="p-6 text-center bg-gray-700/50 rounded-xl">
-                <Truck className="w-10 h-10 mx-auto text-gray-500" />
-                <h3 className="mt-4 text-xl font-bold text-gray-300">Перевозки не найдены</h3>
-                <p className="mt-1 text-gray-400">Проверьте, правильно ли указан диапазон дат.</p>
-            </div>
-        );
-    }
-
-    // Обработка данных, если они существуют и являются массивом
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-100">Список Перевозок ({data.length})</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {data.map((item, index) => (
-                    <div key={index} className="bg-gray-800 rounded-xl shadow-xl border border-gray-700/50 overflow-hidden hover:shadow-blue-500/30 transition duration-300">
-                        <div className="p-4 bg-blue-900/50 border-b border-blue-800">
-                            <h4 className="text-lg font-extrabold text-blue-300">Перевозка #{item.ID || 'N/A'}</h4>
-                            <p className="text-xs text-blue-400 mt-1">{item.GosNum || 'Номер не указан'}</p>
-                        </div>
-                        
-                        <div className="divide-y divide-gray-700/50">
-                            <TableRow 
-                                label="Маршрут" 
-                                // Предполагаем, что FromPoint и ToPoint содержат информацию о маршруте
-                                value={`${item.FromPoint || '?'} → ${item.ToPoint || '?'}`} 
-                                icon={<MapPin className="w-5 h-5" />}
-                            />
-                            <TableRow 
-                                label="Дата и время" 
-                                // Используем поле Date для отображения даты/времени
-                                value={item.Date || 'N/A'} 
-                                icon={<Calendar className="w-5 h-5" />}
-                            />
-                            <TableRow 
-                                label="Время в пути" 
-                                // Используем поле Time для отображения времени в пути
-                                value={item.Time || 'N/A'} 
-                                icon={<Clock className="w-5 h-5" />}
-                            />
-                            <TableRow 
-                                label="Стоимость" 
-                                // Используем поле Summa для отображения стоимости
-                                value={item.Summa ? `${item.Summa} ₽` : 'N/A'} 
-                                icon={<DollarSign className="w-5 h-5" />}
-                                className="bg-gray-800/80"
-                            />
-                            {/* Вы можете добавить другие поля из вашего API, если они нужны */}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-export default TableDisplay;
+  } catch (error) {
+    // Улучшенная обработка ошибок
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Proxy error:", error);
+    return res
+      .status(500)
+      .json({ error: "Proxy error", details: errorMessage });
+  }
+}
