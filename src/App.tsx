@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { 
     LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff, 
-    AlertTriangle, Download, RefreshCw // <-- ДОБАВЛЕНЫ НОВЫЕ ИМПОРТЫ
+    AlertTriangle, Download, RefreshCw 
 } from 'lucide-react';
 
 // --- ТИПЫ ДАННЫХ ---
@@ -12,7 +12,7 @@ type AuthData = {
 
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 
-// --- ТИП ДАННЫХ ГРУЗА (Основан на полях, используемых в CargoPage) ---
+// --- ТИП ДАННЫХ ГРУЗА ---
 type CargoItem = {
     Nomer?: string;
     Number?: string;
@@ -23,8 +23,8 @@ type CargoItem = {
     DatePrih?: string;
     DatePr?: string;
     datePr?: string;
-    CityFrom?: string; // Добавим для полноты
-    CityTo?: string;   // Добавим для полноты
+    CityFrom?: string;
+    CityTo?: string;
     PW?: string;
     Weight?: string;
     Sum?: string;
@@ -34,7 +34,7 @@ type CargoItem = {
 
 // --- КОНФИГУРАЦИЯ ---
 const PROXY_API_BASE_URL = '/api/perevozki'; 
-const FILE_PROXY_API_BASE_URL = '/api/getfile'; // <-- ДОБАВЛЕНА КОНСТАНТА ДЛЯ ФАЙЛОВОГО ПРОКСИ
+const FILE_PROXY_API_BASE_URL = '/api/getfile'; 
 
 // --- КОНСТАНТЫ ДЛЯ ОТОБРАЖЕНИЯ CURL ---
 const ADMIN_AUTH_BASE64_FOR_CURL = 'YWRtaW46anVlYmZueWU='; 
@@ -87,15 +87,25 @@ export default function App() {
             
             const authHeader = getAuthHeader(cleanLogin, cleanPassword);
             const clientBasicAuthValue = authHeader.Authorization.replace('Basic ', ''); 
+            
+            // --- ДОБАВЛЕННЫЕ ПАРАМЕТРЫ ДАТЫ ДЛЯ ЗАПРОСА ВХОДА ---
+            const dateFrom = '2024-01-01';
+            const dateTo = '2026-01-01';
 
-            const curl = `curl -X GET '${EXTERNAL_API_BASE_URL_FOR_CURL}?DateB=2024-01-01&DateE=2026-01-01' \\
+            const curl = `curl -X GET '${EXTERNAL_API_BASE_URL_FOR_CURL}?DateB=${dateFrom}&DateE=${dateTo}' \\
   -H 'Authorization: Basic ${ADMIN_AUTH_BASE64_FOR_CURL}' \\
   -H 'Auth: Basic ${clientBasicAuthValue}' \\
   -H 'Accept-Encoding: identity'`;
             
             setCurlRequest(curl);
+            
+            // Формируем URL с query параметрами
+            const queryParams = new URLSearchParams({
+                dateFrom: dateFrom,
+                dateTo: dateTo,
+            }).toString();
 
-            const res = await fetch(`${PROXY_API_BASE_URL}`, { 
+            const res = await fetch(`${PROXY_API_BASE_URL}?${queryParams}`, { // <-- ИСПРАВЛЕНИЕ: URL теперь содержит параметры
                 method: "GET", 
                 headers: { 
                     ...authHeader 
@@ -140,7 +150,7 @@ export default function App() {
     if (!auth) {
         return (
             <>
-            {/* Встроенные стили из App (2).tsx */}
+            {/* Встроенные стили */}
             <style>
                 {`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
@@ -387,7 +397,7 @@ export default function App() {
                     display: grid;
                     grid-template-columns: 1fr;
                     gap: 1rem;
-                    width: 100%; /* Убедимся, что контейнер занимает всю ширину */
+                    width: 100%; 
                 }
                 @media (min-width: 768px) {
                     .grid-container {
@@ -427,7 +437,7 @@ export default function App() {
                     transition: background-color 0.15s;
                 }
                 .button-download:hover:not(:disabled) {
-                    background-color: #2563eb; /* Чуть темнее */
+                    background-color: #2563eb; 
                 }
                 .button-download:disabled {
                     opacity: 0.6;
@@ -653,13 +663,11 @@ type CargoPageProps = {
 };
 
 function CargoPage({ auth }: CargoPageProps) {
-    // Используем CargoItem[] вместо any[]
     const [items, setItems] = useState<CargoItem[]>([]); 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [aiSummary, setAiSummary] = useState("Искусственный интеллект анализирует ваши данные...");
     const [summaryLoading, setSummaryLoading] = useState(true);
-    // Состояние для отслеживания загружаемого номера груза
     const [downloading, setDownloading] = useState<string | null>(null); 
 
 
@@ -691,7 +699,7 @@ function CargoPage({ auth }: CargoPageProps) {
         }).format(num);
     };
 
-    // --- ФУНКЦИЯ СКАЧИВАНИЯ ФАЙЛА (ВЗЯТА С ПРЕДЫДУЩЕГО ШАГА) ---
+    // --- ФУНКЦИЯ СКАЧИВАНИЯ ФАЙЛА ---
     const handleDownload = async (cargoNumber: string) => {
         setDownloading(cargoNumber); 
         setError(null);
