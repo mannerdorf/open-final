@@ -1,5 +1,5 @@
 import { FormEvent, useState, useEffect } from "react"; 
-import { LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff } from 'lucide-react';
+import { LogOut, Loader2, Check, X, Moon, Sun, Eye, EyeOff } from 'lucide-react';
 
 // --- ТИПЫ ДАННЫХ ---
 type AuthData = {
@@ -7,14 +7,11 @@ type AuthData = {
     password: string;
 };
 
-type Tab = "home" | "cargo" | "docs" | "support" | "profile";
-
 // --- КОНФИГУРАЦИЯ ---
 // Точка входа для запросов на ваш прокси-сервер Vercel
 const PROXY_API_BASE_URL = '/api/perevozki'; 
 
-// --- ФУНКЦИЯ ДЛЯ BASIC AUTH ---
-// Фронтенд всегда должен кодировать логин:пароль, отправляя его в прокси
+// --- ФУНКЦИЯ ДЛЯ BASIC AUTH (для отправки на прокси) ---
 const getAuthHeader = (login: string, password: string): { Authorization: string } => {
     const credentials = `${login}:${password}`;
     // btoa доступен в браузере
@@ -41,7 +38,6 @@ const generateDynamicCurlString = (clientLogin: string, clientPassword: string):
 };
 
 export default function App() {
-    // Теперь логин и пароль будут динамически влиять на CURL
     const [login, setLogin] = useState("order@lal-auto.com"); 
     const [password, setPassword] = useState("ZakaZ656565"); 
     const [agreeOffer, setAgreeOffer] = useState(true);
@@ -51,7 +47,7 @@ export default function App() {
     const [showPassword, setShowPassword] = useState(false);
     
     const [auth, setAuth] = useState<AuthData | null>(null);
-    const [activeTab, setActiveTab] = useState<Tab>("cargo"); 
+    // Удален state activeTab
     const [theme, setTheme] = useState('dark');
     const isThemeLight = theme === 'light';
 
@@ -114,8 +110,8 @@ export default function App() {
                 return;
             }
 
+            // УСПЕХ: Устанавливаем данные авторизации
             setAuth({ login: cleanLogin, password: cleanPassword });
-            setActiveTab("cargo");
             setError(null);
         } catch (err: any) {
             setError(err?.message || "Ошибка сети. Проверьте адрес прокси.");
@@ -127,9 +123,7 @@ export default function App() {
 
     const handleLogout = () => {
         setAuth(null);
-        setActiveTab("cargo");
         setError(null);
-        // При выходе CURL обновится через useEffect
     }
     
     const toggleTheme = () => {
@@ -137,326 +131,280 @@ export default function App() {
     };
 
 
-    // --------------- ЭКРАН АВТОРИЗАЦИИ ---------------
+    // --------------- СТИЛИ (оставлены без изменений для сохранения темы) ---------------
+    const globalStyles = (
+        <style>
+            {`
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+            
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background-color: var(--color-bg-primary); 
+                font-family: 'Inter', sans-serif;
+            }
+            
+            :root {
+                /* Dark Mode Defaults */
+                --color-bg-primary: #1f2937;
+                --color-bg-secondary: #374151;
+                --color-bg-card: #374151;
+                --color-bg-hover: #4b5563;
+                --color-bg-input: #4b5563;
+                --color-text-primary: #e5e7eb;
+                --color-text-secondary: #9ca3af;
+                --color-border: #4b5563;
+                --color-ai-bg: rgba(75, 85, 99, 0.5);
+                --color-primary-blue: #3b82f6;
+                --color-error-bg: rgba(185, 28, 28, 0.1);
+                --color-error-border: #b91c1c;
+                --color-error-text: #fca5a5;
+            }
+            
+            .light-mode {
+                --color-bg-primary: #f9fafb;
+                --color-bg-secondary: #ffffff;
+                --color-bg-card: #ffffff;
+                --color-bg-hover: #f3f4f6;
+                --color-bg-input: #f3f4f6;
+                --color-text-primary: #1f2937;
+                --color-text-secondary: #6b7280;
+                --color-border: #e5e7eb;
+                --color-ai-bg: #f3f4f6;
+                --color-primary-blue: #2563eb;
+                --color-error-bg: #fee2e2;
+                --color-error-border: #fca5a5;
+                --color-error-text: #b91c1c;
+            }
+
+            .app-container {
+                min-height: 100vh;
+                background-color: var(--color-bg-primary);
+                color: var(--color-text-primary);
+                font-family: 'Inter', sans-serif;
+                display: flex;
+                flex-direction: column;
+                transition: background-color 0.3s, color 0.3s;
+            }
+            
+            /* Custom utility classes */
+            .text-theme-text { color: var(--color-text-primary); }
+            .text-theme-secondary { color: var(--color-text-secondary); }
+            .text-theme-primary { color: var(--color-primary-blue); }
+            .border-theme-border { border-color: var(--color-border); }
+            .hover\\:bg-theme-hover-bg:hover { background-color: var(--color-bg-hover); }
+
+            /* Login screen styles */
+            .login-form-wrapper {
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 2rem;
+            }
+            .login-card {
+                max-width: 28rem;
+                width: 100%;
+                margin: 0 auto;
+                background-color: var(--color-bg-card);
+                padding: 2.5rem;
+                border-radius: 1rem;
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+                border: 1px solid var(--color-border);
+                position: relative;
+            }
+            .logo-text {
+                font-size: 2.5rem;
+                font-weight: 900;
+                text-align: center;
+                margin-bottom: 0.5rem;
+                color: var(--color-primary-blue);
+            }
+            .tagline {
+                text-align: center;
+                margin-bottom: 2rem;
+                color: var(--color-text-secondary);
+                font-size: 0.9rem;
+            }
+            .form {
+                display: flex;
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+            .login-input {
+                width: 100%;
+                background-color: var(--color-bg-input);
+                border: 1px solid var(--color-border);
+                color: var(--color-text-primary);
+                padding: 0.75rem;
+                padding-right: 3rem; 
+                border-radius: 0.75rem;
+                transition: all 0.15s;
+                outline: none;
+            }
+            .login-input:focus {
+                box-shadow: 0 0 0 2px var(--color-primary-blue);
+                border-color: var(--color-primary-blue);
+            }
+            .password-input-container {
+                position: relative;
+                width: 100%;
+            }
+            .toggle-password-visibility {
+                position: absolute;
+                right: 0.75rem;
+                top: 50%;
+                transform: translateY(-50%);
+                background: none;
+                border: none;
+                color: var(--color-text-secondary);
+                cursor: pointer;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10;
+            }
+            .toggle-password-visibility:hover {
+                color: var(--color-primary-blue);
+            }
+
+            .login-error {
+                padding: 0.75rem;
+                background-color: var(--color-error-bg);
+                border: 1px solid var(--color-error-border);
+                color: var(--color-error-text); 
+                font-size: 0.875rem;
+                border-radius: 0.5rem;
+                margin-top: 1rem;
+                display: flex;
+                align-items: center;
+            }
+
+            /* Switch/Tumbler styles */
+            .checkbox-row {
+                display: flex;
+                align-items: center;
+                font-size: 0.875rem;
+                color: var(--color-text-secondary);
+                cursor: pointer;
+            }
+            .checkbox-row a {
+                color: var(--color-primary-blue);
+                text-decoration: none;
+                font-weight: 600;
+            }
+            .switch-wrapper {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+            }
+            .switch-container {
+                position: relative;
+                width: 2.75rem; 
+                height: 1.5rem; 
+                border-radius: 9999px;
+                transition: background-color 0.2s ease-in-out;
+                flex-shrink: 0;
+                background-color: var(--color-text-secondary);
+            }
+            .switch-container.checked {
+                background-color: var(--color-primary-blue);
+            }
+            .switch-knob {
+                position: absolute;
+                top: 0.125rem; 
+                left: 0.125rem; 
+                width: 1.25rem; 
+                height: 1.25rem; 
+                background-color: white;
+                border-radius: 9999px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                transform: translateX(0);
+                transition: transform 0.2s ease-in-out;
+            }
+            .switch-container.checked .switch-knob {
+                transform: translateX(1.25rem); 
+            }
+
+            /* Other styles (header, cards, etc.) */
+            .app-header {
+                padding: 1rem;
+                background-color: var(--color-bg-secondary);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                position: sticky;
+                top: 0;
+                z-index: 10;
+                border-bottom: 1px solid var(--color-border);
+            }
+            .app-main {
+                flex-grow: 1;
+                padding: 1.5rem 1rem;
+                display: flex;
+                justify-content: center;
+                align-items: center; /* Центрируем по вертикали для сообщения об успехе */
+            }
+            .button-primary {
+                background-color: var(--color-primary-blue);
+                color: white;
+                padding: 0.75rem 1.5rem;
+                border-radius: 0.75rem;
+                font-weight: 600;
+                transition: background-color 0.15s;
+                border: none;
+                cursor: pointer;
+            }
+            .button-primary:hover:not(:disabled) {
+                background-color: #2563eb;
+            }
+            .button-primary:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            .theme-toggle-button {
+                background: none;
+                border: none;
+                color: var(--color-text-secondary);
+                cursor: pointer;
+                padding: 0.5rem;
+                border-radius: 50%;
+                transition: background-color 0.15s;
+            }
+            .theme-toggle-button:hover {
+                background-color: var(--color-bg-hover);
+            }
+            .curl-display {
+                background-color: var(--color-bg-secondary);
+                border: 1px solid var(--color-border);
+                border-radius: 0.5rem;
+                padding: 0.75rem;
+                margin-top: 1.5rem;
+                font-family: monospace;
+                font-size: 0.8rem;
+                white-space: pre-wrap;
+                word-break: break-all;
+                color: var(--color-text-secondary);
+                position: relative;
+            }
+            .curl-display strong {
+                color: var(--color-text-primary);
+            }
+
+            `}
+        </style>
+    );
+
+    // --------------- ЭКРАН АВТОРИЗАЦИИ (Login Form) ---------------
     if (!auth) {
         return (
             <>
-            {/* Ваши стили (без изменений) */}
-            <style>
-                {`
-                /* ... (Стили без изменений) ... */
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
-                
-                * {
-                    box-sizing: border-box;
-                }
-                body {
-                    margin: 0;
-                    background-color: var(--color-bg-primary); 
-                    font-family: 'Inter', sans-serif;
-                }
-                
-                :root {
-                    /* Dark Mode Defaults */
-                    --color-bg-primary: #1f2937;
-                    --color-bg-secondary: #374151;
-                    --color-bg-card: #374151;
-                    --color-bg-hover: #4b5563;
-                    --color-bg-input: #4b5563;
-                    --color-text-primary: #e5e7eb;
-                    --color-text-secondary: #9ca3af;
-                    --color-border: #4b5563;
-                    --color-ai-bg: rgba(75, 85, 99, 0.5);
-                    --color-primary-blue: #3b82f6;
-                    --color-error-bg: rgba(185, 28, 28, 0.1);
-                    --color-error-border: #b91c1c;
-                    --color-error-text: #fca5a5;
-                }
-                
-                .light-mode {
-                    --color-bg-primary: #f9fafb;
-                    --color-bg-secondary: #ffffff;
-                    --color-bg-card: #ffffff;
-                    --color-bg-hover: #f3f4f6;
-                    --color-bg-input: #f3f4f6;
-                    --color-text-primary: #1f2937;
-                    --color-text-secondary: #6b7280;
-                    --color-border: #e5e7eb;
-                    --color-ai-bg: #f3f4f6;
-                    --color-primary-blue: #2563eb;
-                    --color-error-bg: #fee2e2;
-                    --color-error-border: #fca5a5;
-                    --color-error-text: #b91c1c;
-                }
-
-                .app-container {
-                    min-height: 100vh;
-                    background-color: var(--color-bg-primary);
-                    color: var(--color-text-primary);
-                    font-family: 'Inter', sans-serif;
-                    display: flex;
-                    flex-direction: column;
-                    transition: background-color 0.3s, color 0.3s;
-                }
-                
-                /* Custom utility classes */
-                .text-theme-text { color: var(--color-text-primary); }
-                .text-theme-secondary { color: var(--color-text-secondary); }
-                .text-theme-primary { color: var(--color-primary-blue); }
-                .border-theme-border { border-color: var(--color-border); }
-                .hover\\:bg-theme-hover-bg:hover { background-color: var(--color-bg-hover); }
-
-                /* Login screen styles */
-                .login-form-wrapper {
-                    min-height: 100vh;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    padding: 2rem;
-                }
-                .login-card {
-                    max-width: 28rem;
-                    width: 100%;
-                    margin: 0 auto;
-                    background-color: var(--color-bg-card);
-                    padding: 2.5rem;
-                    border-radius: 1rem;
-                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-                    border: 1px solid var(--color-border);
-                    position: relative;
-                }
-                .logo-text {
-                    font-size: 2.5rem;
-                    font-weight: 900;
-                    text-align: center;
-                    margin-bottom: 0.5rem;
-                    color: var(--color-primary-blue);
-                }
-                .tagline {
-                    text-align: center;
-                    margin-bottom: 2rem;
-                    color: var(--color-text-secondary);
-                    font-size: 0.9rem;
-                }
-                .form {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 1.5rem;
-                }
-                /* .field-label - УДАЛЕНЫ */
-                .login-input {
-                    width: 100%;
-                    background-color: var(--color-bg-input);
-                    border: 1px solid var(--color-border);
-                    color: var(--color-text-primary);
-                    padding: 0.75rem;
-                    padding-right: 3rem; 
-                    border-radius: 0.75rem;
-                    transition: all 0.15s;
-                    outline: none;
-                }
-                .login-input:focus {
-                    box-shadow: 0 0 0 2px var(--color-primary-blue);
-                    border-color: var(--color-primary-blue);
-                }
-                .password-input-container {
-                    position: relative;
-                    width: 100%;
-                }
-                .toggle-password-visibility {
-                    position: absolute;
-                    right: 0.75rem;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    background: none;
-                    border: none;
-                    color: var(--color-text-secondary);
-                    cursor: pointer;
-                    padding: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 10;
-                }
-                .toggle-password-visibility:hover {
-                    color: var(--color-primary-blue);
-                }
-
-                .login-error {
-                    padding: 0.75rem;
-                    background-color: var(--color-error-bg);
-                    border: 1px solid var(--color-error-border);
-                    color: var(--color-error-text); 
-                    font-size: 0.875rem;
-                    border-radius: 0.5rem;
-                    margin-top: 1rem;
-                    display: flex;
-                    align-items: center;
-                }
-
-                /* Switch/Tumbler styles */
-                .checkbox-row {
-                    display: flex;
-                    align-items: center;
-                    font-size: 0.875rem;
-                    color: var(--color-text-secondary);
-                    cursor: pointer;
-                }
-                .checkbox-row a {
-                    color: var(--color-primary-blue);
-                    text-decoration: none;
-                    font-weight: 600;
-                }
-                .switch-wrapper {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    width: 100%;
-                }
-                .switch-container {
-                    position: relative;
-                    width: 2.75rem; 
-                    height: 1.5rem; 
-                    border-radius: 9999px;
-                    transition: background-color 0.2s ease-in-out;
-                    flex-shrink: 0;
-                    background-color: var(--color-text-secondary);
-                }
-                .switch-container.checked {
-                    background-color: var(--color-primary-blue);
-                }
-                .switch-knob {
-                    position: absolute;
-                    top: 0.125rem; 
-                    left: 0.125rem; 
-                    width: 1.25rem; 
-                    height: 1.25rem; 
-                    background-color: white;
-                    border-radius: 9999px;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    transform: translateX(0);
-                    transition: transform 0.2s ease-in-out;
-                }
-                .switch-container.checked .switch-knob {
-                    transform: translateX(1.25rem); 
-                }
-
-                /* Other styles (header, cards, etc.) */
-                .app-header {
-                    padding: 1rem;
-                    background-color: var(--color-bg-secondary);
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    position: sticky;
-                    top: 0;
-                    z-index: 10;
-                    border-bottom: 1px solid var(--color-border);
-                }
-                .app-main {
-                    flex-grow: 1;
-                    padding: 1.5rem 1rem 4rem 1rem;
-                    display: flex;
-                    justify-content: center;
-                    align-items: flex-start;
-                }
-                .ai-summary-card {
-                    background-color: var(--color-bg-card);
-                    border-radius: 0.75rem;
-                    padding: 1rem;
-                    border: 1px solid var(--color-border);
-                    margin-bottom: 1.5rem;
-                }
-                .empty-state-card {
-                    background-color: var(--color-bg-card);
-                    border: 1px solid var(--color-border);
-                    border-radius: 1rem;
-                    padding: 3rem;
-                    text-align: center;
-                    margin-top: 5rem;
-                }
-                .grid-container {
-                    display: grid;
-                    grid-template-columns: 1fr;
-                    gap: 1rem;
-                }
-                @media (min-width: 768px) {
-                    .grid-container {
-                        grid-template-columns: 1fr 1fr;
-                    }
-                }
-                .perevozka-card {
-                    background-color: var(--color-bg-card);
-                    border-radius: 0.75rem;
-                    border: 1px solid var(--color-border);
-                    overflow: hidden;
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                    transition: box-shadow 0.3s, border-color 0.3s;
-                }
-                .card-header {
-                    padding: 0.75rem;
-                    background-color: var(--color-bg-secondary);
-                    border-bottom: 1px solid var(--color-border);
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                }
-                .fixed { position: fixed; }
-                .bottom-0 { bottom: 0; }
-                .left-0 { left: 0; }
-                .right-0 { right: 0; }
-                .z-50 { z-index: 50; }
-                .shadow-lg { box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1), 0 -2px 4px -2px rgba(0, 0, 0, 0.06); }
-                .button-primary {
-                    background-color: var(--color-primary-blue);
-                    color: white;
-                    padding: 0.75rem 1.5rem;
-                    border-radius: 0.75rem;
-                    font-weight: 600;
-                    transition: background-color 0.15s;
-                    border: none;
-                    cursor: pointer;
-                }
-                .button-primary:hover:not(:disabled) {
-                    background-color: #2563eb;
-                }
-                .button-primary:disabled {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                }
-                .theme-toggle-button {
-                    background: none;
-                    border: none;
-                    color: var(--color-text-secondary);
-                    cursor: pointer;
-                    padding: 0.5rem;
-                    border-radius: 50%;
-                    transition: background-color 0.15s;
-                }
-                .theme-toggle-button:hover {
-                    background-color: var(--color-bg-hover);
-                }
-                .curl-display {
-                    background-color: var(--color-bg-secondary);
-                    border: 1px solid var(--color-border);
-                    border-radius: 0.5rem;
-                    padding: 0.75rem;
-                    margin-top: 1.5rem;
-                    font-family: monospace;
-                    font-size: 0.8rem;
-                    white-space: pre-wrap;
-                    word-break: break-all;
-                    color: var(--color-text-secondary);
-                    position: relative;
-                }
-                .curl-display strong {
-                    color: var(--color-text-primary);
-                }
-
-
-                `}
-            </style>
+            {globalStyles}
             
             <div className={`app-container ${theme}-mode login-form-wrapper`}>
                 <div className={`login-card relative`}>
@@ -486,7 +434,6 @@ export default function App() {
                             />
                         </div>
 
-                        {/* Поле для пароля с переключением видимости */}
                         <div className="field">
                             <div className="password-input-container">
                                 <input
@@ -507,7 +454,6 @@ export default function App() {
                             </div>
                         </div>
 
-                        {/* Тумблер для согласия с офертой */}
                         <label className="checkbox-row switch-wrapper">
                             <span>
                                 Согласие с{" "}
@@ -523,7 +469,6 @@ export default function App() {
                             </div>
                         </label>
 
-                        {/* Тумблер для согласия на обработку данных */}
                         <label className="checkbox-row switch-wrapper">
                             <span>
                                 Согласие на{" "}
@@ -550,327 +495,52 @@ export default function App() {
 
                     {error && <p className="login-error mt-4"><X className="w-5 h-5 mr-2" />{error}</p>}
                     
-                    {/* --- ПОЛЕ ДЛЯ ОТОБРАЖЕНИЯ ЭТАЛОННОГО CURL (теперь динамического) --- */}
+                    {/* ПОЛЕ ДЛЯ ОТОБРАЖЕНИЯ ДИНАМИЧЕСКОГО CURL */}
                     <div className="curl-display">
                         <strong className="text-xs block mb-1">Эталонный CURL (Vercel Proxy → Внешний API 1С)</strong>
                         <pre>{curlCommand}</pre>
                     </div>
-                    {/* -------------------------------------- */}
                 </div>
             </div>
             </>
         );
     }
 
-    // --------------- АВТОРИЗОВАННАЯ ЧАСТЬ ---------------
-
+    // --------------- ЭКРАН УСПЕШНОЙ АВТОРИЗАЦИИ ---------------
     return (
         <div className={`app-container ${theme}-mode`}>
+            {globalStyles}
             
             <header className="app-header">
                 <h1 className="header-title">
                     <span className="logo-text text-theme-primary" style={{ fontSize: '1.5rem', margin: 0 }}>HAULZ</span>
                 </h1>
                 <div className="flex items-center space-x-3">
-                    <button className="theme-toggle-button" onClick={handleLogout} title="Выйти">
-                        <LogOut className="w-5 h-5 text-red-500" />
-                    </button>
                     <button className="theme-toggle-button" onClick={toggleTheme} title="Переключить тему">
                         {isThemeLight ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
+                    </button>
+                    <button className="theme-toggle-button" onClick={handleLogout} title="Выйти">
+                        <LogOut className="w-5 h-5 text-red-500" />
                     </button>
                 </div>
             </header>
 
             <div className="app-main">
-                <div className="w-full max-w-4xl"> 
-                    {activeTab === "cargo" && <CargoPage auth={auth} />}
-                    {activeTab === "home" && <StubPage title="Главная" />}
-                    {activeTab === "docs" && <StubPage title="Документы" />}
-                    {activeTab === "support" && <StubPage title="Поддержка" />}
-                    {activeTab === "profile" && <StubPage title="Профиль" />}
+                <div className="w-full max-w-lg p-6 bg-[var(--color-bg-card)] rounded-xl shadow-xl text-center border border-theme-border">
+                    <Check className="w-16 h-16 mx-auto mb-4 text-green-500" />
+                    <h2 className="text-3xl font-bold text-theme-text mb-2">Авторизация прошла успешно!</h2>
+                    <p className="text-theme-secondary mb-4">
+                        Учетные данные для пользователя **{auth.login}** подтверждены.
+                    </p>
+                    <p className="text-sm text-theme-secondary mb-6">
+                        Это сообщение отображается после успешного запроса к API.
+                    </p>
+                    <button className="button-primary" onClick={handleLogout}>
+                        <LogOut className="w-4 h-4 mr-2 inline-block" /> Выйти и проверить снова
+                    </button>
                 </div>
             </div>
-
-            <TabBar active={activeTab} onChange={setActiveTab} />
-        </div>
-    );
-}
-
-// ----------------- КОМПОНЕНТ С ГРУЗАМИ -----------------
-
-type CargoPageProps = { 
-    auth: AuthData; 
-};
-
-function CargoPage({ auth }: CargoPageProps) {
-    const [items, setItems] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [aiSummary, setAiSummary] = useState("Искусственный интеллект анализирует ваши данные...");
-    const [summaryLoading, setSummaryLoading] = useState(true);
-
-    const formatDate = (dateString: string | undefined): string => {
-        if (!dateString) return '-';
-        try {
-            const date = new Date(dateString);
-            if (!isNaN(date.getTime())) {
-                 return date.toLocaleDateString('ru-RU');
-            }
-        } catch (e) { /* ignore */ }
-        const [year, month, day] = dateString.split('-');
-        if (year && month && day) {
-            return `${day}.${month}.${year}`;
-        }
-        return dateString;
-    };
-    
-    const formatCurrency = (value: number | string | undefined): string => {
-        if (value === undefined || value === null || value === "") return '-';
-        const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
-        if (isNaN(num)) return String(value);
-
-        return new Intl.NumberFormat('ru-RU', {
-            style: 'currency',
-            currency: 'RUB',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        }).format(num);
-    };
-
-    const loadData = async (login: string, password: string) => {
-            setLoading(true);
-            setError(null);
-            setSummaryLoading(true);
-
-            // Даты для запроса грузов (за последний год)
-            const today = new Date();
-            const oneYearAgo = new Date();
-            oneYearAgo.setFullYear(today.getFullYear() - 1);
-
-            const formatDateForApi = (date: Date): string => {
-                const y = date.getFullYear();
-                const m = String(date.getMonth() + 1).padStart(2, '0');
-                const d = String(date.getDate()).padStart(2, '0');
-                return `${y}-${m}-${d}`;
-            };
             
-            const dateFrom = formatDateForApi(oneYearAgo);
-            const dateTo = formatDateForApi(today);
-            
-            // Query parameters для GET
-            const queryParams = new URLSearchParams({
-                dateFrom: dateFrom,
-                dateTo: dateTo,
-            }).toString();
-
-            try {
-                // --- ИСПОЛЬЗУЕТСЯ МЕТОД GET ---
-                const url = `${PROXY_API_BASE_URL}?${queryParams}`;
-                
-                // ВАЖНО: Мы снова генерируем заголовок для фактического запроса
-                const { Authorization } = getAuthHeader(login, password);
-
-                const res = await fetch(url, {
-                    method: "GET",
-                    headers: { 
-                        // Basic Auth Header (для прокси)
-                        'Authorization': Authorization,
-                        'Content-Type': 'application/json'
-                    },
-                });
-
-                if (!res.ok) {
-                    let message = `Ошибка загрузки: ${res.status}. Убедитесь в корректности данных и прокси.`;
-                    if (res.status === 401) {
-                        message = "Ошибка авторизации (401). Проверьте логин и пароль.";
-                    }
-                    setError(message);
-                    setItems([]);
-                    setSummaryLoading(false);
-                    return;
-                }
-
-                const data = await res.json();
-                
-                const list = Array.isArray(data) ? data : data.Perevozki || data.items || [];
-                
-                setItems(list);
-
-                const totalSum = list.reduce((sum: number, item: any) => sum + (parseFloat(item.Sum || item.Total || 0) || 0), 0);
-                setAiSummary(`За последний год вы совершили ${list.length} перевозок. Общая сумма составила ${formatCurrency(totalSum)}.`);
-                setSummaryLoading(false);
-
-            } catch (e: any) {
-                setError(e?.message || "Ошибка сети при загрузке данных.");
-                setItems([]);
-                setSummaryLoading(false);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-    // Хук для загрузки данных при монтировании (после успешной авторизации)
-    useEffect(() => {
-        // Мы вызываем loadData только если авторизованы
-        if (auth?.login && auth?.password) {
-            loadData(auth.login, auth.password);
-        }
-    }, [auth?.login, auth?.password]); 
-
-
-    return (
-        <div className="p-4">
-            <h2 className="text-3xl font-bold text-theme-text mb-2">Мои перевозки</h2>
-            <p className="text-theme-secondary mb-4 pb-4 border-b border-theme-border">
-                Данные загружаются методом **GET** с передачей учетных данных в заголовке **Authorization: Basic** на Vercel Proxy, который затем выполняет двойную авторизацию в 1С.
-            </p>
-
-            {/* AI Summary Card */}
-            <div className="ai-summary-card">
-                <div className="flex items-start">
-                    <span className="mr-3 text-theme-primary font-bold text-xl">AI</span>
-                    <div>
-                        <p className="text-sm font-semibold mb-1 text-theme-text">Краткая сводка</p>
-                        <p className={`text-theme-text text-sm ${summaryLoading ? 'italic text-theme-secondary' : 'font-medium'}`}>
-                            {summaryLoading ? <span className="flex items-center"><Loader2 className="animate-spin w-4 h-4 mr-2" /> Анализ данных...</span> : aiSummary}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-
-            {loading && <p className="flex items-center text-lg text-yellow-500"><Loader2 className="animate-spin mr-2 w-5 h-5" /> Загружаем данные...</p>}
-            
-            {error && <p className="login-error flex items-center"><X className="w-5 h-5 mr-2" />{error}</p>}
-
-            {!loading && !error && items.length === 0 && (
-                <div className="empty-state-card text-theme-secondary">
-                    <Truck className="w-12 h-12 mx-auto mb-3 text-theme-primary" />
-                    <p className="text-lg font-semibold text-theme-text">Перевозок не найдено</p>
-                    <p className="text-sm">Проверьте, правильно ли указаны логин и пароль.</p>
-                </div>
-            )}
-
-            <div className="grid-container mt-6">
-                {items.map((item, idx) => {
-                    const number = item.Nomer || item.Number || item.number || "-";
-                    const status = item.Status || item.State || item.state || "-";
-                    const date = formatDate(item.DatePrih || item.DatePr || item.datePr);
-                    const weight = item.PW || item.Weight || "-";
-                    const sum = formatCurrency(item.Sum || item.Total);
-
-                    return (
-                        <div className="perevozka-card" key={idx}>
-                            <div className="card-header">
-                                <span className="text-sm font-semibold text-theme-secondary">Перевозка №</span>
-                                <span className="text-lg font-bold text-theme-primary">{number}</span>
-                            </div>
-                            <div className="p-3">
-                                <div className="flex justify-between items-center py-2 border-b border-theme-border">
-                                    <span className="text-sm text-theme-secondary flex items-center"><Check className="w-4 h-4 mr-2 text-green-500" /> Статус</span>
-                                    <span className="text-theme-text font-semibold">{status}</span>
-                                </div>
-                                <div className="flex justify-between items-center py-2 border-b border-theme-border">
-                                    <span className="text-sm text-theme-secondary flex items-center"><Truck className="w-4 h-4 mr-2 text-indigo-400" /> Дата прибытия</span>
-                                    <span className="text-theme-text font-semibold">{date}</span>
-                                </div>
-                                <div className="flex justify-between items-center py-2 border-b border-theme-border">
-                                    <span className="text-sm text-theme-secondary flex items-center"><span className="text-xs font-extrabold mr-2">W</span> Вес, кг</span>
-                                    <span className="text-theme-text font-semibold">{weight}</span>
-                                </div>
-                                <div className="flex justify-between items-center py-2">
-                                    <span className="text-sm text-theme-secondary flex items-center"><span className="text-md font-extrabold mr-2 text-yellow-500">₽</span> Сумма</span>
-                                    <span className="text-lg font-bold text-yellow-500">{sum}</span>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
         </div>
-    );
-}
-
-
-// ----------------- ЗАГЛУШКИ ДЛЯ ДРУГИХ ВКЛАДОК -----------------
-
-function StubPage({ title }: { title: string }) {
-    return (
-        <div className="p-4">
-            <h2 className="text-3xl font-bold text-theme-text mb-2">{title}</h2>
-            <p className="text-theme-secondary mb-4 pb-4 border-b border-theme-border">Этот раздел мы заполним позже.</p>
-            
-            <div className="empty-state-card text-theme-secondary mt-10">
-                <FileText className="w-12 h-12 mx-auto mb-3 text-theme-primary" />
-                <p className="text-lg font-semibold text-theme-text">В разработке</p>
-                <p className="text-sm">Возвращайтесь позже, чтобы увидеть {title.toLowerCase()}.</p>
-            </div>
-        </div>
-    );
-}
-
-// ----------------- НИЖНЕЕ МЕНЮ -----------------
-
-type TabBarProps = {
-    active: Tab;
-    onChange: (t: Tab) => void;
-};
-
-function TabBar({ active, onChange }: TabBarProps) {
-    return (
-        <div className="fixed bottom-0 left-0 right-0 flex justify-around bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg p-2 z-50 bg-[var(--color-bg-card)] border-theme-border">
-            <TabButton
-                label="Главная"
-                icon={<Home className="w-5 h-5" />}
-                active={active === "home"}
-                onClick={() => onChange("home")}
-            />
-            <TabButton
-                label="Грузы"
-                icon={<Truck className="w-5 h-5" />}
-                active={active === "cargo"}
-                onClick={() => onChange("cargo")}
-            />
-            <TabButton
-                label="Документы"
-                icon={<FileText className="w-5 h-5" />}
-                active={active === "docs"}
-                onClick={() => onChange("docs")}
-            />
-            <TabButton
-                label="Поддержка"
-                icon={<MessageCircle className="w-5 h-5" />}
-                active={active === "support"}
-                onClick={() => onChange("support")}
-            />
-            <TabButton
-                label="Профиль"
-                icon={<User className="w-5 h-5" />}
-                active={active === "profile"}
-                onClick={() => onChange("profile")}
-            />
-        </div>
-    );
-}
-
-type TabButtonProps = {
-    label: string;
-    icon: React.ReactNode;
-    active: boolean;
-    onClick: () => void;
-};
-
-function TabButton({ label, icon, active, onClick }: TabButtonProps) {
-    const activeClass = active ? 'text-theme-primary' : 'text-theme-secondary';
-    const hoverClass = 'hover:bg-theme-hover-bg';
-    
-    return (
-        <button
-            className={`flex flex-col items-center justify-center p-2 rounded-lg text-sm font-medium transition-colors ${activeClass} ${hoverClass}`}
-            onClick={onClick}
-        >
-            <span className="tab-icon mb-0.5">{icon}</span>
-            <span className="text-xs">{label}</span>
-        </button>
     );
 }
