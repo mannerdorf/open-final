@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X } from 'lucide-react';
+import { LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon } from 'lucide-react';
 
 type AuthData = {
     login: string;
@@ -9,15 +9,16 @@ type AuthData = {
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 
 // --- КОНФИГУРАЦИЯ ---
-const PROXY_API_URL = '/api/perevozki';
-// Используем одну из ранее загруженных картинок для логотипа, если она существует
-const LOGO_IMAGE_SRC = "uploaded:image_bf1f8b.png-1fb3a87b-ad4a-425e-8d1d-1fb9052b9d9c";
+// Используется для обращения к прокси-функции, которая должна выполнить запрос к внешнему API
+const PROXY_API_URL = '/api/perevozki'; 
+// Используем одну из ранее загруженных картинок для логотипа, если она существует (заменен на статичный, так как предыдущий не доступен)
+const LOGO_IMAGE_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAACXBIWXMAAA7DAAAOwwHHBBw6AAABXUlEQVR42u3dMWrEMBCE4W7cQW9cI9fNl1l2c2lT5i5s799v25oY9y9dJpM+7xYQCAQCgUAgEAgEAoG03fOqgH3T/z5W66vXz2fVb7rI6+fz/Kj2x6vLp7+T03fBQQYJCAQCgUAgEAgEAlmsG1YpA/09U353XN68fv3r0tW12b1r/w8W+n32T3tLGAgEAoFAIBAIBALBbNu2yv35bVjR9vWfPq5Pz7rE19b+z9Tq9bO2cZ/9EwkEAoFAIBAIBALB6m7btpI0L59lBwcCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoFALd8N91sYCAQCgUAgEAgEAoH/nC6oYwS6tHhTAAAAAElFTkSuQmCC";
 
 
 export default function App() {
-    // Используем тестовые данные для удобства, как в предыдущих версиях
-    const [login, setLogin] = useState("order@lal-auto.com");
-    const [password, setPassword] = useState("ZakaZ656565");
+    // 1. УБРАНЫ ТЕСТОВЫЕ ДАННЫЕ (установлены пустые строки)
+    const [login, setLogin] = useState("");
+    const [password, setPassword] = useState("");
     const [agreeOffer, setAgreeOffer] = useState(false);
     const [agreePersonal, setAgreePersonal] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -102,7 +103,7 @@ export default function App() {
             <>
             <style jsx="true">{`
                 /* Font Inter */
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
                 
                 body {
                     margin: 0;
@@ -141,6 +142,7 @@ export default function App() {
                     align-items: center;
                     padding: 2rem;
                     background-color: var(--bg-page);
+                    position: relative;
                 }
                 
                 .card {
@@ -152,6 +154,7 @@ export default function App() {
                     max-width: 400px;
                     transition: all 0.3s ease;
                     border: 1px solid var(--border-color);
+                    position: relative; /* Для позиционирования переключателя темы */
                 }
                 .logo-text {
                     font-size: 2.5rem;
@@ -242,6 +245,7 @@ export default function App() {
                     margin-top: 1rem;
                 }
                 
+                /* 3. КОРРЕКЦИЯ СТИЛЕЙ: Переключатель темы внутри карточки */
                 .theme-toggle-container {
                     position: absolute;
                     top: 1rem;
@@ -249,45 +253,40 @@ export default function App() {
                 }
 
                 .theme-toggle-button {
-                    background-color: var(--bg-card);
-                    border: 1px solid var(--border-color);
-                    border-radius: 50%;
+                    background-color: transparent; /* Убрал фон, чтобы он не сливался с карточкой */
+                    border: none;
                     padding: 0.5rem;
                     cursor: pointer;
-                    transition: background-color 0.2s;
+                    transition: color 0.2s;
                 }
                 .theme-toggle-button:hover {
-                    background-color: var(--bg-hover);
+                    color: var(--color-primary);
                 }
                 .theme-toggle-button svg {
                     width: 1.25rem;
                     height: 1.25rem;
-                    color: var(--text-primary);
+                    color: var(--text-secondary); /* Иконка по цвету вторичного текста */
+                    transition: color 0.2s;
+                }
+
+                /* Дополнительная коррекция для отступов в карточке */
+                .card .field:not(:last-child) {
+                    margin-bottom: 0.8rem;
                 }
             `}</style>
             
             <div className={`page ${theme}-mode`}>
-                <div className="theme-toggle-container">
-                    <button className="theme-toggle-button" onClick={toggleTheme}>
-                        {isThemeLight ? <Moon /> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>}
-                    </button>
-                </div>
-
                 <div className="card">
-                    {/* <div className="logo-text">HAULZ</div> */}
+                    {/* 3. КОРРЕКЦИЯ СТИЛЕЙ: Переключатель темы теперь внутри карточки */}
+                    <div className="theme-toggle-container">
+                        <button className="theme-toggle-button" onClick={toggleTheme}>
+                            {isThemeLight ? <Moon className="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>}
+                        </button>
+                    </div>
+
                     <div className="flex justify-center mb-4 h-10">
-                        <img 
-                            src={LOGO_IMAGE_SRC} 
-                            alt="HAULZ Logo"
-                            className="max-h-full object-contain"
-                            onError={(e) => {
-                                // Fallback to text if image fails
-                                e.currentTarget.onerror = null;
-                                e.currentTarget.src = "";
-                                e.currentTarget.style.display = 'none';
-                                e.currentTarget.parentElement!.innerHTML = '<div class="logo-text">HAULZ</div>';
-                            }}
-                        />
+                        {/* ЛОГОТИП */}
+                        <div className="logo-text">HAULZ</div>
                     </div>
                     <div className="tagline">
                         Доставка грузов в Калининград и обратно
@@ -299,7 +298,7 @@ export default function App() {
                             <input
                                 className="input"
                                 type="text"
-                                placeholder="order@lal-auto.com"
+                                placeholder="Введите ваш email"
                                 value={login}
                                 onChange={(e) => setLogin(e.target.value)}
                                 autoComplete="username"
@@ -390,6 +389,10 @@ export default function App() {
                     margin: 0 auto;
                     width: 100%;
                     min-height: calc(100vh - 7rem); /* Учет шапки и таббара */
+                    background-color: var(--bg-card); /* Добавлен фон для основного контента */
+                    border-radius: 12px;
+                    border: 1px solid var(--border-color);
+                    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
                 }
                 .title {
                     font-size: 1.75rem;
@@ -512,24 +515,53 @@ export default function App() {
                     }
                 }
 
+                /* Шапка (Header) */
+                .app-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 1rem;
+                    border-bottom: 1px solid var(--border-color);
+                    background-color: var(--bg-card);
+                    position: sticky;
+                    top: 0;
+                    z-index: 20;
+                }
+                .header-title {
+                    font-size: 1.25rem;
+                    font-weight: 700;
+                    color: var(--text-primary);
+                }
+                .header-btn {
+                    padding: 0.5rem;
+                    border-radius: 50%;
+                    cursor: pointer;
+                    transition: background-color 0.2s;
+                    color: var(--text-secondary);
+                }
+                .header-btn:hover {
+                    background-color: var(--bg-hover);
+                }
+
             `}</style>
             
-            <header className="flex justify-between items-center bg-zinc-800 p-4 border-b border-zinc-700 sticky top-0 z-20">
-                <h1 className="text-xl font-bold text-white">
-                    <span className="text-blue-400">HAULZ</span>
+            <header className="app-header">
+                <h1 className="header-title">
+                    <span style={{ color: 'var(--color-primary)' }}>HAULZ</span>
                 </h1>
                 <div className="flex items-center space-x-3">
-                    <button className="text-white p-2 rounded-full hover:bg-zinc-700" onClick={handleLogout} title="Выйти">
-                        <LogOut className="w-5 h-5 text-red-400" />
+                    <button className="header-btn" onClick={handleLogout} title="Выйти">
+                        <LogOut className="w-5 h-5 text-red-500" />
                     </button>
-                    <button className="text-white p-2 rounded-full hover:bg-zinc-700" onClick={toggleTheme} title="Переключить тему">
+                    <button className="header-btn" onClick={toggleTheme} title="Переключить тему">
                         {isThemeLight ? <Moon className="w-5 h-5 text-gray-700" /> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-sun w-5 h-5 text-yellow-400"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>}
                     </button>
                 </div>
             </header>
 
             <div className="page page-with-tabs">
-                <div className="card card-content">
+                {/* Внимание: класс card-content теперь включает фон и рамку */}
+                <div className="card-content"> 
                     {activeTab === "cargo" && <CargoPage auth={auth} isThemeLight={isThemeLight} />}
                     {activeTab === "home" && <StubPage title="Главная" />}
                     {activeTab === "docs" && <StubPage title="Документы" />}
@@ -555,30 +587,36 @@ function CargoPage({ auth, isThemeLight }: CargoPageProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Функция для форматирования даты из формата YYYY-MM-DD (если доступно)
+    /**
+     * Преобразует дату из формата YYYY-MM-DD (или другого) в русскоязычный формат (DD.MM.YYYY).
+     * @param dateString Строка даты.
+     * @returns Отформатированная строка даты.
+     */
     const formatDate = (dateString: string | undefined): string => {
         if (!dateString) return '-';
         try {
-            // Предполагаем, что API возвращает дату в формате YYYY-MM-DD
-            const [year, month, day] = dateString.split('-');
-            if (year && month && day) {
-                return `${day}.${month}.${year}`;
-            }
-            // Попытка парсинга стандартными средствами
+            // Попытка парсинга стандартными средствами и форматирования в DD.MM.YYYY
             const date = new Date(dateString);
             if (!isNaN(date.getTime())) {
                  return date.toLocaleDateString('ru-RU');
             }
         } catch (e) {
-            return dateString; // Вернуть как есть, если не удалось распарсить
+            // ignore
         }
-        return dateString;
+        // Если не удалось, пробуем форматировать из YYYY-MM-DD
+        const [year, month, day] = dateString.split('-');
+        if (year && month && day) {
+            return `${day}.${month}.${year}`;
+        }
+        return dateString; // Вернуть как есть, если не удалось распарсить
     };
     
-    // Функция для форматирования суммы
+    /**
+     * Функция для форматирования суммы в валюту (RUB)
+     */
     const formatCurrency = (value: number | string | undefined): string => {
         if (value === undefined || value === null || value === "") return '-';
-        const num = typeof value === 'string' ? parseFloat(value) : value;
+        const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
         if (isNaN(num)) return String(value);
 
         return new Intl.NumberFormat('ru-RU', {
@@ -590,6 +628,7 @@ function CargoPage({ auth, isThemeLight }: CargoPageProps) {
     };
 
 
+    // 2. ДОБАВЛЕНИЕ ЛОГИКИ ДЛЯ ФИЛЬТРАЦИИ ЗА ПОСЛЕДНИЙ ГОД
     useEffect(() => {
         let cancelled = false;
 
@@ -597,15 +636,32 @@ function CargoPage({ auth, isThemeLight }: CargoPageProps) {
             setLoading(true);
             setError(null);
 
+            // Определяем даты: сегодня и год назад
+            const today = new Date();
+            const oneYearAgo = new Date();
+            oneYearAgo.setFullYear(today.getFullYear() - 1);
+
+            // Форматируем в YYYY-MM-DD для API
+            const formatDateForApi = (date: Date): string => {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            };
+            
+            const dateFrom = formatDateForApi(oneYearAgo);
+            const dateTo = formatDateForApi(today);
+            
             try {
-                // ПОВТОРНЫЙ ВЫЗОВ ПРОКСИ-ФУНКЦИИ
+                // ВЫЗОВ ПРОКСИ-ФУНКЦИИ С ПАРАМЕТРАМИ ДАТ
                 const res = await fetch(PROXY_API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         login: auth.login.trim(),
                         password: auth.password.trim(),
-                        // Можно добавить dateFrom и dateTo здесь, если нужно фильтровать
+                        dateFrom: dateFrom,
+                        dateTo: dateTo,
                     }),
                 });
 
@@ -642,27 +698,14 @@ function CargoPage({ auth, isThemeLight }: CargoPageProps) {
         return () => {
             cancelled = true;
         };
-    }, [auth.login, auth.password]);
-
-    // Иконки для CargoPage
-    const getIcon = (tab: keyof any) => {
-        switch (tab) {
-            case 'Number': return <span className="text-xl">#</span>;
-            case 'State': return <Check className="w-4 h-4" />;
-            case 'DatePr': return <Truck className="w-4 h-4" />;
-            case 'Mest': return <FileText className="w-4 h-4" />;
-            case 'PW': return <span className="text-sm font-extrabold">W</span>;
-            case 'Sum': return <span className="text-sm font-extrabold">₽</span>;
-            default: return null;
-        }
-    }
+    }, [auth.login, auth.password]); // Зависимость от auth гарантирует перезагрузку после авторизации
 
 
     return (
         <div>
             <h2 className="title text-3xl">Мои перевозки</h2>
             <p className="subtitle">
-                Здесь отображаются все перевозки, полученные из системы.
+                Здесь отображаются все перевозки за **последний год**, полученные из системы.
             </p>
 
             {loading && <p className="flex items-center text-lg text-yellow-500"><Loader2 className="animate-spin mr-2 w-5 h-5" /> Загружаем данные...</p>}
@@ -683,7 +726,6 @@ function CargoPage({ auth, isThemeLight }: CargoPageProps) {
                     const number = item.Nomer || item.Number || item.number || "-";
                     const status = item.Status || item.State || item.state || "-";
                     const date = formatDate(item.DatePrih || item.DatePr || item.datePr);
-                    const mest = item.Mest || item.mest || "-";
                     const weight = item.PW || item.Weight || "-";
                     const sum = formatCurrency(item.Sum || item.Total);
 
@@ -704,11 +746,6 @@ function CargoPage({ auth, isThemeLight }: CargoPageProps) {
                                 <span className="cargo-value">{date}</span>
                             </div>
                             
-                            {/* <div className="cargo-row">
-                                <span className="cargo-label">Мест</span>
-                                <span className="cargo-value">{mest}</span>
-                            </div> */}
-
                             <div className="cargo-row">
                                 <span className="cargo-label flex items-center"><span className="text-sm font-extrabold mr-1">W</span> Вес, кг</span>
                                 <span className="cargo-value">{weight}</span>
@@ -796,12 +833,11 @@ type TabButtonProps = {
 function TabButton({ label, icon, active, onClick }: TabButtonProps) {
     return (
         <button
-            type="button"
-            className={`tab-btn ${active ? "tab-btn-active" : ""}`}
+            className={`tab-btn ${active ? 'tab-btn-active' : ''}`}
             onClick={onClick}
         >
             <span className="tab-icon">{icon}</span>
-            <span className="tab-label">{label}</span>
+            <span>{label}</span>
         </button>
     );
 }
