@@ -10,13 +10,15 @@ type AuthData = {
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 
 // --- КОНФИГУРАЦИЯ ---
-// Эндпоинт прокси-функции
 const PROXY_API_BASE_URL = '/api/perevozki'; 
 
+// --- КОНСТАНТЫ ДЛЯ ОТОБРАЖЕНИЯ CURL ---
+// Эти константы используются ТОЛЬКО для демонстрации CURL-строки,
+// а фактическая логика Dual Auth происходит в прокси-файле.
+const ADMIN_AUTH_BASE64_FOR_CURL = 'YWRtaW46anVlYmZueWU='; 
+const EXTERNAL_API_BASE_URL_FOR_CURL = 'https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki';
+
 // --- ФУНКЦИЯ ДЛЯ BASIC AUTH ---
-/**
- * Создает заголовок Basic Authorization из логина и пароля, кодируя их в Base64.
- */
 const getAuthHeader = (login: string, password: string): { Authorization: string } => {
     const credentials = `${login}:${password}`;
     const encoded = btoa(credentials);
@@ -26,14 +28,13 @@ const getAuthHeader = (login: string, password: string): { Authorization: string
 };
 
 export default function App() {
-    const [login, setLogin] = useState("");
-    const [password, setPassword] = useState("");
-    const [agreeOffer, setAgreeOffer] = useState(false);
-    const [agreePersonal, setAgreePersonal] = useState(false);
+    const [login, setLogin] = useState("order@lal-auto.com"); // Установил дефолтное значение для удобства
+    const [password, setPassword] = useState("ZakaZ656565"); // Установил дефолтное значение для удобства
+    const [agreeOffer, setAgreeOffer] = useState(true);
+    const [agreePersonal, setAgreePersonal] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
-    // --- НОВОЕ: Состояние для CURL-запроса ---
     const [curlRequest, setCurlRequest] = useState<string>(""); 
 
     const [auth, setAuth] = useState<AuthData | null>(null);
@@ -44,7 +45,7 @@ export default function App() {
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setError(null);
-        setCurlRequest(""); // Очищаем CURL перед новой попыткой
+        setCurlRequest(""); 
 
         const cleanLogin = login.trim();
         const cleanPassword = password.trim();
@@ -63,17 +64,20 @@ export default function App() {
             setLoading(true);
             
             const authHeader = getAuthHeader(cleanLogin, cleanPassword);
-            const basicAuthValue = authHeader.Authorization; // "Basic YWRtaW46anVlYmZueWU="
+            // Извлекаем только Base64 часть клиента, чтобы использовать ее в заголовке 'Auth' CURL-строки
+            const clientBasicAuthValue = authHeader.Authorization.replace('Basic ', ''); 
 
-            // --- ФОРМИРОВАНИЕ CURL-СТРОКИ ---
-            const curl = `curl -X GET '${window.location.origin}${PROXY_API_BASE_URL}' \\
-  -H 'Authorization: ${basicAuthValue}' \\
-  -H 'Accept: application/json'`;
+            // --- ФОРМИРОВАНИЕ CURL-СТРОКИ, КОТОРУЮ ОТПРАВЛЯЕТ ПРОКСИ В 1С ---
+            // Включает двойные заголовки и фиктивные даты для демонстрации
+            const curl = `curl -X GET '${EXTERNAL_API_BASE_URL_FOR_CURL}?DateB=2024-01-01&DateE=2025-01-01' \\
+  -H 'Authorization: Basic ${ADMIN_AUTH_BASE64_FOR_CURL}' \\
+  -H 'Auth: Basic ${clientBasicAuthValue}' \\
+  -H 'Accept-Encoding: identity'`;
             
             setCurlRequest(curl);
-            // ---------------------------------
+            // -------------------------------------------------------------
 
-            // --- КОРРЕКЦИЯ: Используем GET для авторизации и запроса данных ---
+            // --- ОСНОВНОЙ ЗАПРОС К ПРОКСИ ---
             const res = await fetch(`${PROXY_API_BASE_URL}`, { 
                 method: "GET", 
                 headers: { 
@@ -97,7 +101,6 @@ export default function App() {
             setActiveTab("cargo");
             setError(null);
         } catch (err: any) {
-            // В случае сетевой ошибки (CORS, прокси недоступен и т.п.)
             setError(err?.message || "Ошибка сети. Проверьте адрес прокси.");
             setAuth(null);
         } finally {
@@ -485,10 +488,13 @@ export default function App() {
                     {/* --- ТЕХНИЧЕСКОЕ ПОЛЕ CURL --- */}
                     {curlRequest && (
                         <div className="mt-4 p-3 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg">
-                            <h3 className="text-sm font-semibold text-theme-text mb-1">Итоговый CURL-запрос к прокси:</h3>
+                            <h3 className="text-sm font-semibold text-theme-text mb-1">Итоговый CURL-запрос, отправляемый **прокси** в 1С:</h3>
                             <pre className="whitespace-pre-wrap break-all text-xs text-[var(--color-text-secondary)] font-mono">
                                 {curlRequest}
                             </pre>
+                            <p className="text-xs text-yellow-500 mt-2">
+                                **Внимание:** Проверьте, что запрос, который вы видите выше, работает в Postman/терминале. Если он работает, проблема в логике прокси-файла.
+                            </p>
                         </div>
                     )}
                     {/* ------------------------------------- */}
@@ -598,7 +604,6 @@ function CargoPage({ auth }: CargoPageProps) {
             const dateTo = formatDateForApi(today);
             
             // Query parameters для GET
-            // Используются dateFrom и dateTo, чтобы имитировать запрос данных за период
             const queryParams = new URLSearchParams({
                 dateFrom: dateFrom,
                 dateTo: dateTo,
