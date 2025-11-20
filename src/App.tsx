@@ -1,10 +1,19 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { Buffer } from "buffer"; // Важно: Buffer доступен в Node.js средах
 
 const BASE_URL =
-  "https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki";
+  "[https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki](https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki)";
 
 // сервисный Basic-auth: admin:juebfnye
 const SERVICE_AUTH = "Basic YWRtaW46anVlYmZueWU=";
+
+// Определяем тип для ожидаемого тела запроса
+interface RequestBody {
+  login?: string;
+  password?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -12,14 +21,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Разбираем body (может быть уже объектом или строкой)
-  let body: any = req.body;
-  if (typeof body === "string") {
+  // Разбираем body и приводим к нужному типу
+  let body: RequestBody;
+  if (typeof req.body === "string") {
     try {
-      body = JSON.parse(body);
+      body = JSON.parse(req.body);
     } catch {
       return res.status(400).json({ error: "Invalid JSON body" });
     }
+  } else {
+    body = req.body || {};
   }
 
   const {
@@ -27,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     password,
     dateFrom = "2024-01-01",
     dateTo = "2026-01-01",
-  } = body || {};
+  } = body;
 
   const cleanLogin = (login || "").trim();
   const cleanPassword = (password || "").trim();
@@ -36,10 +47,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "login and password are required" });
   }
 
-  // Для отладки можно посмотреть, что реально доходит
+  // Логирование: убраны чувствительные данные (пароль)
   console.log("PEREVOZKI AUTH CALL", {
     login: cleanLogin,
-    passwordLength: cleanPassword.length,
     ua: req.headers["user-agent"],
   });
 
@@ -47,15 +57,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   url.searchParams.set("DateB", dateFrom);
   url.searchParams.set("DateE", dateTo);
 
+  // --- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Base64 кодирование пользовательских данных ---
+  const userAuthBase64 = Buffer.from(`${cleanLogin}:${cleanPassword}`).toString(
+    "base64"
+  );
+
   try {
     const upstream = await fetch(url.toString(), {
       method: "GET",
       headers: {
-        // как в curl из Postman:
-        // Auth: Basic order@lal-auto.com:ZakaZ656565
-        Auth: `Basic ${cleanLogin}:${cleanPassword}`,
-        // Authorization: Basic YWRtaW46anVlYmZueWU=
-        Authorization: SERVICE_AUTH,
+        // ИСПРАВЛЕНО: Теперь данные логина:пароля кодируются в Base64
+        Auth: `Basic ${userAuthBase64}`,
+        // SERVICE_AUTH остается как есть
+        Authorization: SERVICE_AUTH, 
       },
     });
 
@@ -82,10 +96,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // не JSON — возвращаем текст как есть
       return res.status(200).send(text);
     }
-  } catch (e: any) {
-    console.error("Proxy error:", e);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Proxy error:", error);
     return res
       .status(500)
-      .json({ error: "Proxy error", details: e?.message || String(e) });
+      .json({ error: "Proxy error", details: errorMessage });
   }
 }
