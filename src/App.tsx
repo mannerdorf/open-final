@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun } from 'lucide-react';
+import { LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff } from 'lucide-react'; // Добавлены Eye и EyeOff
 
 type AuthData = {
     login: string;
@@ -9,21 +9,16 @@ type AuthData = {
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 
 // --- КОНФИГУРАЦИЯ ---
-// Используем базовый URL без конечного метода, так как в GET нужно добавить параметры
 const PROXY_API_BASE_URL = '/api/perevozki'; 
 
 // --- ФУНКЦИЯ ДЛЯ BASIC AUTH ---
-/**
- * Создает заголовок Basic Authorization из логина и пароля.
- */
 const getAuthHeader = (login: string, password: string): { Authorization: string } => {
     const credentials = `${login}:${password}`;
-    const encoded = btoa(credentials); // Кодирование в Base64
+    const encoded = btoa(credentials);
     return {
         Authorization: `Basic ${encoded}`,
     };
 };
-
 
 export default function App() {
     const [login, setLogin] = useState("");
@@ -32,6 +27,7 @@ export default function App() {
     const [agreePersonal, setAgreePersonal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false); // Новое состояние для показа/скрытия пароля
 
     const [auth, setAuth] = useState<AuthData | null>(null);
     const [activeTab, setActiveTab] = useState<Tab>("cargo"); 
@@ -58,24 +54,25 @@ export default function App() {
         try {
             setLoading(true);
             
-            // --- КОРРЕКЦИЯ: ПРОВЕРКА АВТОРИЗАЦИИ МЕТОДОМ GET ---
-            // Используем простой GET-запрос к API для проверки учетных данных
-            const res = await fetch(`${PROXY_API_BASE_URL}?checkAuth=true`, {
+            // --- ДЛЯ ОТЛАДКИ: Вывод заголовка авторизации ---
+            const authHeader = getAuthHeader(cleanLogin, cleanPassword);
+            console.log("Отправляемый заголовок Authorization:", authHeader.Authorization);
+            // --- КОНЕЦ ОТЛАДКИ ---
+
+            const res = await fetch(`${PROXY_API_BASE_URL}`, { // Убрал "?checkAuth=true", так как он не используется прокси
                 method: "GET", 
                 headers: { 
-                    ...getAuthHeader(cleanLogin, cleanPassword) // Basic Auth Header
+                    ...authHeader 
                 },
             });
 
             if (!res.ok) {
                 let message = `Ошибка авторизации: ${res.status}. Проверьте логин и пароль.`;
-                // Ошибки Postman/cURL часто не дают текст ответа, просто статус
                 setError(message);
                 setAuth(null);
                 return;
             }
 
-            // Авторизация ок
             setAuth({ login: cleanLogin, password: cleanPassword });
             setActiveTab("cargo");
             setError(null);
@@ -153,12 +150,7 @@ export default function App() {
                     align-items: center;
                     font-size: 0.875rem;
                     color: var(--color-text-secondary);
-                }
-                .checkbox-row input[type="checkbox"] {
-                    margin-right: 0.6rem;
-                    accent-color: var(--color-primary-blue);
-                    width: 1rem;
-                    height: 1rem;
+                    cursor: pointer; /* Делаем всю строку кликабельной для тумблера */
                 }
                 .checkbox-row a {
                     color: var(--color-primary-blue);
@@ -191,6 +183,66 @@ export default function App() {
                     height: 1.25rem;
                     transition: color 0.2s;
                 }
+
+                /* Стили для тумблеров (switch) */
+                .switch-wrapper {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    width: 100%;
+                }
+
+                .switch-container {
+                    position: relative;
+                    width: 2.75rem; /* ~44px */
+                    height: 1.5rem; /* ~24px */
+                    border-radius: 9999px; /* fully rounded */
+                    transition: background-color 0.2s ease-in-out;
+                    flex-shrink: 0;
+                    background-color: var(--color-text-secondary); /* default gray */
+                }
+                .switch-container.checked {
+                    background-color: var(--color-primary-blue); /* blue when checked */
+                }
+                .switch-knob {
+                    position: absolute;
+                    top: 0.125rem; /* 2px */
+                    left: 0.125rem; /* 2px */
+                    width: 1.25rem; /* 20px */
+                    height: 1.25rem; /* 20px */
+                    background-color: white;
+                    border-radius: 9999px;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                    transform: translateX(0);
+                    transition: transform 0.2s ease-in-out;
+                }
+                .switch-container.checked .switch-knob {
+                    transform: translateX(1.25rem); /* moves 20px to the right */
+                }
+
+                /* Стили для поля пароля с кнопкой */
+                .password-input-container {
+                    position: relative;
+                    width: 100%;
+                }
+                .toggle-password-visibility {
+                    position: absolute;
+                    right: 0.75rem; /* padding login-input */
+                    top: 50%;
+                    transform: translateY(-50%);
+                    background: none;
+                    border: none;
+                    color: var(--color-text-secondary);
+                    cursor: pointer;
+                    padding: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10;
+                }
+                .toggle-password-visibility:hover {
+                    color: var(--color-primary-blue);
+                }
                 `}
             </style>
             
@@ -222,44 +274,58 @@ export default function App() {
                             />
                         </div>
 
+                        {/* Поле для пароля с переключением видимости */}
                         <div className="field">
                             <div className="field-label text-theme-text">Пароль</div>
-                            <input
-                                className="login-input"
-                                type="password"
-                                placeholder="Введите пароль"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                autoComplete="current-password"
-                            />
+                            <div className="password-input-container">
+                                <input
+                                    className="login-input"
+                                    type={showPassword ? "text" : "password"}
+                                    placeholder="Введите пароль"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    autoComplete="current-password"
+                                />
+                                <button 
+                                    type="button" 
+                                    className="toggle-password-visibility" 
+                                    onClick={() => setShowPassword(!showPassword)}
+                                >
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
                         </div>
 
-                        <label className="checkbox-row">
-                            <input
-                                type="checkbox"
-                                checked={agreeOffer}
-                                onChange={(e) => setAgreeOffer(e.target.checked)}
-                            />
+                        {/* Тумблер для согласия с офертой */}
+                        <label className="checkbox-row switch-wrapper">
                             <span>
                                 Согласие с{" "}
                                 <a href="#" target="_blank" rel="noreferrer">
                                     публичной офертой
                                 </a>
                             </span>
+                            <div 
+                                className={`switch-container ${agreeOffer ? 'checked' : ''}`}
+                                onClick={() => setAgreeOffer(!agreeOffer)} // Переключаем состояние при клике
+                            >
+                                <div className="switch-knob"></div>
+                            </div>
                         </label>
 
-                        <label className="checkbox-row">
-                            <input
-                                type="checkbox"
-                                checked={agreePersonal}
-                                onChange={(e) => setAgreePersonal(e.target.checked)}
-                            />
+                        {/* Тумблер для согласия на обработку данных */}
+                        <label className="checkbox-row switch-wrapper">
                             <span>
                                 Согласие на{" "}
                                 <a href="#" target="_blank" rel="noreferrer">
                                     обработку персональных данных
                                 </a>
                             </span>
+                            <div 
+                                className={`switch-container ${agreePersonal ? 'checked' : ''}`}
+                                onClick={() => setAgreePersonal(!agreePersonal)} // Переключаем состояние при клике
+                            >
+                                <div className="switch-knob"></div>
+                            </div>
                         </label>
 
                         <button className="button-primary mt-4 flex justify-center items-center" type="submit" disabled={loading}>
@@ -283,7 +349,6 @@ export default function App() {
     return (
         <div className={`app-container ${theme}-mode`}>
             
-            {/* Адаптированная Шапка */}
             <header className="app-header">
                 <h1 className="header-title">
                     <span className="logo-text text-theme-primary" style={{ fontSize: '1.5rem', margin: 0 }}>HAULZ</span>
@@ -363,7 +428,6 @@ function CargoPage({ auth }: CargoPageProps) {
             setError(null);
             setSummaryLoading(true);
 
-            // Формирование периода за последний год
             const today = new Date();
             const oneYearAgo = new Date();
             oneYearAgo.setFullYear(today.getFullYear() - 1);
@@ -378,31 +442,23 @@ function CargoPage({ auth }: CargoPageProps) {
             const dateFrom = formatDateForApi(oneYearAgo);
             const dateTo = formatDateForApi(today);
             
-            // --- КОРРЕКЦИЯ: ИСПОЛЬЗОВАНИЕ GET С ПАРАМЕТРАМИ ---
             const queryParams = new URLSearchParams({
                 dateFrom: dateFrom,
                 dateTo: dateTo,
-                // Если API требует также логин/пароль в Query, добавляем их. 
-                // Обычно Basic Auth достаточно, но для соответствия cURL добавим:
-                login: auth.login.trim(),
-                password: auth.password.trim(),
             }).toString();
 
             try {
-                // ИСПОЛЬЗУЕТСЯ МЕТОД GET
                 const url = `${PROXY_API_BASE_URL}?${queryParams}`;
                 
                 const res = await fetch(url, {
                     method: "GET",
                     headers: { 
-                        // Basic Auth Header (основной механизм)
                         ...getAuthHeader(auth.login, auth.password)
                     },
                 });
 
                 if (!res.ok) {
                     let message = `Ошибка загрузки: ${res.status}. Убедитесь в корректности данных и прокси.`;
-                    // Ошибки Postman/cURL часто не дают текст ответа
                     if (!cancelled) setError(message);
                     return;
                 }
@@ -413,7 +469,6 @@ function CargoPage({ auth }: CargoPageProps) {
                 
                 if (!cancelled) setItems(list);
 
-                // Имитация загрузки AI-сводки
                 setTimeout(() => {
                     if (!cancelled) {
                         const totalSum = list.reduce((sum: number, item: any) => sum + (parseFloat(item.Sum || item.Total || 0) || 0), 0);
@@ -444,7 +499,6 @@ function CargoPage({ auth }: CargoPageProps) {
                 Данные загружаются методом **GET** с передачей учетных данных в заголовке **Authorization: Basic** (согласно Postman).
             </p>
 
-            {/* AI Summary Card */}
             <div className="ai-summary-card">
                 <div className="flex items-start">
                     <span className="mr-3 text-theme-primary font-bold text-xl">AI</span>
@@ -554,41 +608,3 @@ function TabBar({ active, onChange }: TabBarProps) {
                 icon={<FileText className="w-5 h-5" />}
                 active={active === "docs"}
                 onClick={() => onChange("docs")}
-            />
-            <TabButton
-                label="Поддержка"
-                icon={<MessageCircle className="w-5 h-5" />}
-                active={active === "support"}
-                onClick={() => onChange("support")}
-            />
-            <TabButton
-                label="Профиль"
-                icon={<User className="w-5 h-5" />}
-                active={active === "profile"}
-                onClick={() => onChange("profile")}
-            />
-        </div>
-    );
-}
-
-type TabButtonProps = {
-    label: string;
-    icon: React.ReactNode;
-    active: boolean;
-    onClick: () => void;
-};
-
-function TabButton({ label, icon, active, onClick }: TabButtonProps) {
-    const activeClass = active ? 'text-theme-primary' : 'text-theme-secondary';
-    const hoverClass = 'hover:bg-theme-hover-bg';
-    
-    return (
-        <button
-            className={`flex flex-col items-center justify-center p-2 rounded-lg text-sm font-medium transition-colors ${activeClass} ${hoverClass}`}
-            onClick={onClick}
-        >
-            <span className="tab-icon mb-0.5">{icon}</span>
-            <span className="text-xs">{label}</span>
-        </button>
-    );
-}
