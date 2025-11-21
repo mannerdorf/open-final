@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useState, useCallback, useMemo } from "react";
 // Импортируем все необходимые иконки
 import { 
-    LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff, AlertTriangle, Package, Calendar, Tag, Layers, Weight, Filter, Search, ChevronDown, User as UserIcon, Scale, DollarSign, List, Download, FileText as FileTextIcon, Send, 
-    RussianRuble, LayoutGrid, Maximize, TrendingUp, CornerUpLeft, ClipboardCheck, CreditCard, Minus 
+    LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff, AlertTriangle, Package, Calendar, Tag, Layers, Weight, Filter, Search, ChevronDown, User as UserIcon, Scale, RussianRuble, List, Download, FileText as FileTextIcon, Send, 
+    LayoutGrid, Maximize, TrendingUp, CornerUpLeft, ClipboardCheck, CreditCard, Minus 
 } from 'lucide-react';
 import React from "react";
 import "./styles.css";
@@ -95,7 +95,7 @@ const formatDate = (dateString: string | undefined): string => {
 };
 
 const formatCurrency = (value: number | string | undefined): string => {
-    if (!value) return '-';
+    if (value === undefined || value === null || (typeof value === 'string' && value.trim() === "")) return '-';
     const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
     return isNaN(num) ? String(value) : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(num);
 };
@@ -130,7 +130,6 @@ function HomePage({ cargoList, isLoading, error, auth, fetchList }: { cargoList:
     const [filterLevel, setFilterLevel] = useState<1 | 2>(1);
     const [currentFilter, setCurrentFilter] = useState<string | null>(null);
 
-    // Временная заглушка, пока не включена настоящая логика расчета
     const statsData = useMemo(() => {
         // Здесь должна быть логика расчета, пока используем заглушки
         return { level1: STATS_LEVEL_1, level2: STATS_LEVEL_2 };
@@ -240,10 +239,10 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
             <div className="filters-container">
                 <div className="filter-group">
                     <button className="filter-button" onClick={() => { setIsDateDropdownOpen(!isDateDropdownOpen); setIsStatusDropdownOpen(false); }}>
-                        Дата: {dateFilter} <ChevronDown className="w-4 h-4"/>
+                        Дата: {dateFilter === 'custom' ? 'Период' : dateFilter} <ChevronDown className="w-4 h-4"/>
                     </button>
                     {isDateDropdownOpen && <div className="filter-dropdown">
-                        {['all', 'today', 'week', 'month', 'custom'].map(key => <div key={key} className="dropdown-item" onClick={() => { setDateFilter(key as any); setIsDateDropdownOpen(false); if(key==='custom') setIsCustomModalOpen(true); }}>{key === 'all' ? 'Все' : key}</div>)}
+                        {['all', 'today', 'week', 'month', 'custom'].map(key => <div key={key} className="dropdown-item" onClick={() => { setDateFilter(key as any); setIsDateDropdownOpen(false); if(key==='custom') setIsCustomModalOpen(true); }}>{key === 'all' ? 'Все' : key === 'today' ? 'Сегодня' : key === 'week' ? 'Неделя' : key === 'month' ? 'Месяц' : 'Период'}</div>)}
                     </div>}
                 </div>
                 <div className="filter-group">
@@ -316,7 +315,9 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
     if (!isOpen) return null;
 
     const renderValue = (val: any, unit = '') => {
-        if (val === undefined || val === null || val === "") return '-';
+        // Улучшенная проверка на пустоту: проверяем на undefined, null и строку, 
+        // которая после обрезки пробелов становится пустой.
+        if (val === undefined || val === null || (typeof val === 'string' && val.trim() === "")) return '-';
         
         // Обработка сложных объектов/массивов
         if (typeof val === 'object' && val !== null && !React.isValidElement(val)) {
@@ -392,7 +393,6 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
                 
                 {/* ДОПОЛНИТЕЛЬНЫЕ поля из API */}
                 <h4 style={{marginTop: '1rem', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 600}}>Прочие данные из API</h4>
-                {/* Исправленная верстка для прочих полей */}
                 <div className="details-grid-modal">
                     {Object.entries(item)
                         .filter(([key]) => !EXCLUDED_KEYS.includes(key))
@@ -510,7 +510,8 @@ export default function App() {
             <div className={`app-container login-form-wrapper`}>
                 <div className="login-card">
                     <div className="absolute top-4 right-4">
-                        <button className="theme-toggle-button-login" onClick={toggleTheme}>
+                        <button className="theme-toggle-button-login" onClick={toggleTheme} title={theme === 'dark' ? 'Светлый режим' : 'Темный режим'}>
+                            {/* ЛОГИКА ИКОНОК ТЕМЫ ИСПРАВЛЕНА: Показывает, на что переключится. */}
                             {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5" />}
                         </button>
                     </div>
@@ -528,6 +529,7 @@ export default function App() {
                                 </button>
                             </div>
                         </div>
+                        {/* ТУМБЛЕРЫ ВОССТАНОВЛЕНЫ */}
                         <label className="checkbox-row switch-wrapper">
                             <span>Согласие с <a href="#">публичной офертой</a></span>
                             <div className={`switch-container ${agreeOffer ? 'checked' : ''}`} onClick={() => setAgreeOffer(!agreeOffer)}><div className="switch-knob"></div></div>
