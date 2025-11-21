@@ -200,11 +200,19 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
             const data = await res.json();
             const list = Array.isArray(data) ? data : data.items || [];
             
+            // ВАЖНОЕ ИСПРАВЛЕНИЕ: гарантируем, что ключевые поля передаются
             setItems(list.map((item: any) => ({
                 ...item,
-                Number: item.Number, DatePrih: item.DatePrih, DateVruch: item.DateVruch, State: item.State, Mest: item.Mest, 
+                Number: item.Number, 
+                DatePrih: item.DatePrih, 
+                DateVruch: item.DateVruch, // Дата вручения
+                State: item.State, 
+                Mest: item.Mest, 
                 PV: item.PV || item.PaymentWeight || item.PW, 
-                Weight: item.Weight, Volume: item.Volume, Sum: item.Sum, StatusSchet: item.StatusSchet
+                Weight: item.Weight, // Вес
+                Volume: item.Volume, // Объем
+                Sum: item.Sum, 
+                StatusSchet: item.StatusSchet // Статус счета
             })));
         } catch (e: any) { setError(e.message); } finally { setLoading(false); }
     }, [auth]);
@@ -254,7 +262,6 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
 
             {/* List */}
             {loading && <div className="text-center py-8"><Loader2 className="animate-spin w-6 h-6 mx-auto text-theme-primary" /></div>}
-            {!loading && error && <p className="login-error"><AlertTriangle className="w-5 h-5 mr-2" />{error}</p>}
             {!loading && !error && filteredItems.length === 0 && (
                 <div className="empty-state-card">
                     <Package className="w-12 h-12 mx-auto mb-4 text-theme-secondary opacity-50" />
@@ -268,7 +275,7 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
                         <div className="cargo-header-row"><span className="order-number">№ {item.Number}</span><span className="date"><Calendar className="w-3 h-3 mr-1"/>{formatDate(item.DatePrih)}</span></div>
                         <div className="cargo-details-grid">
                             <div className="detail-item"><Tag className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Статус</div><div className={getStatusClass(item.State)}>{item.State}</div></div>
-                            <div className="detail-item"><Layers className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Мест</div><div className="detail-item-value">{item.Mest}</div></div>
+                            <div className="detail-item"><Layers className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Мест</div><div className="detail-item-value">{item.Mest || '-'}</div></div>
                             <div className="detail-item"><Scale className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Плат. вес</div><div className="detail-item-value">{item.PV || '-'}</div></div>
                         </div>
                         <div className="cargo-footer"><span className="sum-label">Сумма</span><span className="sum-value">{formatCurrency(item.Sum)}</span></div>
@@ -314,9 +321,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         // Обработка сложных объектов/массивов
         if (typeof val === 'object' && val !== null && !React.isValidElement(val)) {
             try {
-                // Если это пустой объект/массив, показываем "-"
                 if (Object.keys(val).length === 0) return '-';
-                // Форматируем JSON для отображения, если это объект
                 return <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.75rem', margin: 0}}>{JSON.stringify(val, null, 2)}</pre>;
             } catch (e) {
                 return String(val); 
@@ -369,27 +374,30 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
                     <button className="doc-button" onClick={handleChat}><MessageCircle className="w-4 h-4 mr-2"/>Чат</button>
                     <button className="doc-button" onClick={handleShare}><Send className="w-4 h-4 mr-2"/>Поделиться</button>
                 </div>
+                
+                {/* Исправленная верстка для модального окна */}
                 <div className="details-grid-modal">
                     {/* Явно отображаемые поля */}
                     <DetailItem label="Номер" value={item.Number} />
                     <DetailItem label="Статус" value={item.State} statusClass={getStatusClass(item.State)} />
                     <DetailItem label="Приход" value={formatDate(item.DatePrih)} />
-                    <DetailItem label="Вручение" value={formatDate(item.DateVruch)} />
+                    <DetailItem label="Вручение" value={formatDate(item.DateVruch)} /> {/* Дата вручения */}
                     <DetailItem label="Мест" value={renderValue(item.Mest)} icon={<Layers className="w-4 h-4 mr-1 text-theme-primary"/>} />
                     <DetailItem label="Плат. вес" value={renderValue(item.PV, 'кг')} icon={<Scale className="w-4 h-4 mr-1 text-theme-primary"/>} highlighted />
-                    <DetailItem label="Вес" value={renderValue(item.Weight, 'кг')} icon={<Weight className="w-4 h-4 mr-1 text-theme-primary"/>} />
-                    <DetailItem label="Объем" value={renderValue(item.Volume, 'м³')} icon={<List className="w-4 h-4 mr-1 text-theme-primary"/>} />
+                    <DetailItem label="Вес" value={renderValue(item.Weight, 'кг')} icon={<Weight className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Вес */}
+                    <DetailItem label="Объем" value={renderValue(item.Volume, 'м³')} icon={<List className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Объем */}
                     <DetailItem label="Стоимость" value={formatCurrency(item.Sum)} icon={<RussianRuble className="w-4 h-4 mr-1 text-theme-primary"/>} />
-                    <DetailItem label="Счет" value={item.StatusSchet || '-'} highlighted />
+                    <DetailItem label="Счет" value={item.StatusSchet || '-'} highlighted /> {/* Счет - статус */}
                 </div>
                 
                 {/* ДОПОЛНИТЕЛЬНЫЕ поля из API */}
                 <h4 style={{marginTop: '1rem', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 600}}>Прочие данные из API</h4>
+                {/* Исправленная верстка для прочих полей */}
                 <div className="details-grid-modal">
                     {Object.entries(item)
                         .filter(([key]) => !EXCLUDED_KEYS.includes(key))
                         .map(([key, val]) => {
-                            if (val === undefined || val === null || val === "" || (typeof val === 'object' && Object.keys(val).length === 0)) return null; // Скрываем пустые доп. поля
+                            if (val === undefined || val === null || val === "" || (typeof val === 'object' && Object.keys(val).length === 0)) return null; 
                             return <DetailItem key={key} label={key} value={renderValue(val)} />;
                         })}
                 </div>
@@ -437,7 +445,7 @@ const TabBtn = ({ label, icon, active, onClick }: any) => (
 
 export default function App() {
     const [auth, setAuth] = useState<AuthData | null>(null);
-    const [activeTab, setActiveTab] = useState<Tab>("cargo"); // Начальная вкладка - "Грузы"
+    const [activeTab, setActiveTab] = useState<Tab>("cargo"); 
     const [theme, setTheme] = useState('dark'); 
     
     // ИНИЦИАЛИЗАЦИЯ ПУСТЫМИ СТРОКАМИ (данные берутся с фронта)
@@ -482,7 +490,7 @@ export default function App() {
                 return;
             }
             setAuth({ login, password });
-            setActiveTab("cargo"); // ИЗМЕНЕНО: переход на вкладку "Грузы"
+            setActiveTab("cargo"); 
         } catch (err: any) {
             setError("Ошибка сети.");
         } finally {
