@@ -18,10 +18,11 @@ type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 type DateFilter = "all" | "today" | "week" | "month" | "custom";
 type StatusFilter = "all" | "accepted" | "in_transit" | "ready" | "delivering" | "delivered";
 
+// --- ИСПОЛЬЗУЕМ ТОЛЬКО ПЕРЕМЕННЫЕ ИЗ API ---
 type CargoItem = {
-    Number?: string; DatePrih?: string; DateVruch?: string; State?: string; Mest?: number | string; 
-    PV?: number | string; Weight?: number | string; Volume?: number | string; Sum?: number | string; 
-    StatusSchet?: string; [key: string]: any; // Для всех остальных полей
+    Number?: string; DatePrih?: string; DateVr?: string; State?: string; Mest?: number | string; 
+    PW?: number | string; W?: number | string; Value?: number | string; Sum?: number | string; 
+    StateBill?: string; Sender?: string; [key: string]: any; // Для всех остальных полей
 };
 
 type CargoStat = {
@@ -193,15 +194,7 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
 
     const apiDateRange = useMemo(() => dateFilter === "custom" ? { dateFrom: customDateFrom, dateTo: customDateTo } : getDateRange(dateFilter), [dateFilter, customDateFrom, customDateTo]);
 
-    const findDeliveryDate = (item: any): string | undefined => {
-        // Поиск по известным ключам для даты вручения/доставки
-        return item.DateVruch 
-            || item.DateDelivery 
-            || item.DeliveryDate 
-            || item.VruchenieDate 
-            || item.DateFactVruch // Если API использует русские названия
-            || undefined;
-    }
+    // Удалена функция findDeliveryDate, используем DateVr напрямую.
 
     const loadCargo = useCallback(async (dateFrom: string, dateTo: string) => {
         setLoading(true); setError(null);
@@ -211,19 +204,20 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
             const data = await res.json();
             const list = Array.isArray(data) ? data : data.items || [];
             
-            // ВАЖНОЕ ИСПРАВЛЕНИЕ: гарантируем, что ключевые поля передаются
+            // МАППИНГ ДАННЫХ: используем только указанные поля API
             setItems(list.map((item: any) => ({
                 ...item,
                 Number: item.Number, 
                 DatePrih: item.DatePrih, 
-                DateVruch: findDeliveryDate(item), // ИСПОЛЬЗУЕМ ФУНКЦИЮ ПОИСКА
+                DateVr: item.DateVr, // Дата доставки
                 State: item.State, 
                 Mest: item.Mest, 
-                PV: item.PV || item.PaymentWeight || item.PW, 
-                Weight: item.Weight, // Вес
-                Volume: item.Volume, // Объем
+                PW: item.PW, // Платный вес
+                W: item.W, // Общий вес
+                Value: item.Value, // Объем
                 Sum: item.Sum, 
-                StatusSchet: item.StatusSchet // Статус счета
+                StateBill: item.StateBill, // Статус счета
+                Sender: item.Sender, // Отправитель
             })));
         } catch (e: any) { setError(e.message); } finally { setLoading(false); }
     }, [auth]);
@@ -236,7 +230,8 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
         if (statusFilter !== 'all') res = res.filter(i => getFilterKeyByStatus(i.State) === statusFilter);
         if (searchText) {
             const lower = searchText.toLowerCase();
-            res = res.filter(i => [i.Number, i.State, formatDate(i.DatePrih), formatCurrency(i.Sum), String(i.PV), String(i.Mest)].join(' ').toLowerCase().includes(lower));
+            // Обновлены поля поиска: PW вместо PV, добавлен Sender
+            res = res.filter(i => [i.Number, i.State, i.Sender, formatDate(i.DatePrih), formatCurrency(i.Sum), String(i.PW), String(i.Mest)].join(' ').toLowerCase().includes(lower));
         }
         return res;
     }, [items, statusFilter, searchText]);
@@ -284,7 +279,7 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
                         <div className="cargo-details-grid">
                             <div className="detail-item"><Tag className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Статус</div><div className={getStatusClass(item.State)}>{item.State}</div></div>
                             <div className="detail-item"><Layers className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Мест</div><div className="detail-item-value">{item.Mest || '-'}</div></div>
-                            <div className="detail-item"><Scale className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Плат. вес</div><div className="detail-item-value">{item.PV || '-'}</div></div>
+                            <div className="detail-item"><Scale className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Плат. вес</div><div className="detail-item-value">{item.PW || '-'}</div></div>
                         </div>
                         <div className="cargo-footer"><span className="sum-label">Сумма</span><span className="sum-value">{formatCurrency(item.Sum)}</span></div>
                     </div>
@@ -369,8 +364,8 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         else { navigator.clipboard.writeText(text); alert('Скопировано: ' + text); }
     };
 
-    // Список явно отображаемых полей (для исключения из общего списка)
-    const EXCLUDED_KEYS = ['Number', 'DatePrih', 'DateVruch', 'State', 'Mest', 'PV', 'Weight', 'Volume', 'Sum', 'StatusSchet', 'PaymentWeight', 'PW'];
+    // Список явно отображаемых полей (из API примера)
+    const EXCLUDED_KEYS = ['Number', 'DatePrih', 'DateVr', 'State', 'Mest', 'PW', 'W', 'Value', 'Sum', 'StateBill', 'Sender'];
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -385,19 +380,19 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
                     <button className="doc-button" onClick={handleShare}><Send className="w-4 h-4 mr-2"/>Поделиться</button>
                 </div>
                 
-                {/* Исправленная верстка для модального окна */}
+                {/* Явно отображаемые поля (из API примера) */}
                 <div className="details-grid-modal">
-                    {/* Явно отображаемые поля */}
                     <DetailItem label="Номер" value={item.Number} />
                     <DetailItem label="Статус" value={item.State} statusClass={getStatusClass(item.State)} />
                     <DetailItem label="Приход" value={formatDate(item.DatePrih)} />
-                    <DetailItem label="Вручение" value={formatDate(item.DateVruch)} /> {/* Дата вручения */}
+                    <DetailItem label="Доставка" value={formatDate(item.DateVr)} /> {/* Используем DateVr */}
+                    <DetailItem label="Отправитель" value={item.Sender || '-'} /> {/* Добавляем Sender */}
                     <DetailItem label="Мест" value={renderValue(item.Mest)} icon={<Layers className="w-4 h-4 mr-1 text-theme-primary"/>} />
-                    <DetailItem label="Плат. вес" value={renderValue(item.PV, 'кг')} icon={<Scale className="w-4 h-4 mr-1 text-theme-primary"/>} highlighted />
-                    <DetailItem label="Вес" value={renderValue(item.Weight, 'кг')} icon={<Weight className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Вес */}
-                    <DetailItem label="Объем" value={renderValue(item.Volume, 'м³')} icon={<List className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Объем */}
+                    <DetailItem label="Плат. вес" value={renderValue(item.PW, 'кг')} icon={<Scale className="w-4 h-4 mr-1 text-theme-primary"/>} highlighted /> {/* Используем PW */}
+                    <DetailItem label="Вес" value={renderValue(item.W, 'кг')} icon={<Weight className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Используем W */}
+                    <DetailItem label="Объем" value={renderValue(item.Value, 'м³')} icon={<List className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Используем Value */}
                     <DetailItem label="Стоимость" value={formatCurrency(item.Sum)} icon={<RussianRuble className="w-4 h-4 mr-1 text-theme-primary"/>} />
-                    <DetailItem label="Счет" value={item.StatusSchet || '-'} highlighted /> {/* Счет - статус */}
+                    <DetailItem label="Статус Счета" value={item.StateBill || '-'} highlighted /> {/* Используем StateBill */}
                 </div>
                 
                 {/* ДОПОЛНИТЕЛЬНЫЕ поля из API */}
@@ -406,10 +401,9 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
                     {Object.entries(item)
                         .filter(([key]) => !EXCLUDED_KEYS.includes(key))
                         .map(([key, val]) => {
-                            // УСИЛЕННАЯ ПРОВЕРКА: Пропускаем, если значение пустое
+                            // Пропускаем, если значение пустое
                             if (val === undefined || val === null || val === "" || (typeof val === 'string' && val.trim() === "") || (typeof val === 'object' && val !== null && Object.keys(val).length === 0)) return null; 
-                            
-                            // Дополнительная проверка: пропускаем, если значение - 0 (и это не сумма/вес)
+                            // Пропускаем, если значение - 0
                             if (val === 0 && key.toLowerCase().includes('date') === false) return null;
                             
                             return <DetailItem key={key} label={key} value={renderValue(val)} />;
