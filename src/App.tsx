@@ -18,12 +18,12 @@ type AuthData = {
 
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 
-type DateFilter = "all" | "сегодня" | "неделя" | "месяц" | "период";
+type DateFilter = "all" | "today" | "week" | "month" | "custom";
 type StatusFilter = "all" | "accepted" | "in_transit" | "ready" | "delivering" | "delivered";
 
 // Тип для данных о перевозке (для ясности)
 type CargoItem = {
-    Number?: string; // Номер перевозки
+    Number: string; // Номер перевозки (обязательно для ключа)
     DatePrih?: string; // Дата прихода
     DateVruch?: string; // Дата вручения (если есть)
     State?: string; // Статус
@@ -33,8 +33,8 @@ type CargoItem = {
     Volume?: number | string; // Объем
     Sum?: number | string; // Стоимость
     StatusSchet?: string; // Статус счета
-    SenderName?: string; // Имя отправителя
-    RecipientName?: string; // Имя получателя
+    SenderCity?: string; // Город отправителя
+    ReceiverCity?: string; // Город получателя
     [key: string]: any; // Дополнительные поля
 };
 
@@ -56,13 +56,18 @@ const getSixMonthsAgoDate = () => {
     return d.toISOString().split('T')[0];
 };
 
-const DEFAULT_DATE_FROM = getSixMonthsAgoDate(); // 6 месяцев назад
-const DEFAULT_DATE_TO = getTodayDate(); // Сегодня
+const STATUS_MAP: Record<string, { label: string, color: 'success' | 'pending' | 'danger' }> = {
+    'delivered': { label: 'Доставлен', color: 'success' },
+    'delivering': { label: 'Доставка', color: 'pending' },
+    'ready': { label: 'Готов к выдаче', color: 'pending' },
+    'in_transit': { label: 'В пути', color: 'pending' },
+    'accepted': { label: 'Принят', color: 'pending' },
+    'canceled': { label: 'Отменен', color: 'danger' },
+};
 
-// --- УТИЛИТЫ ---
+// --- УТИЛИТЫ ДЛЯ ДАТ ---
 
-// Утилита для определения диапазона дат
-const getDateRange = (filter: DateFilter) => {
+const getDateRange = (filter: DateFilter, customDateFrom?: string, customDateTo?: string) => {
     const today = new Date();
     const dateTo = getTodayDate();
     let dateFrom = getTodayDate();
@@ -71,847 +76,49 @@ const getDateRange = (filter: DateFilter) => {
         case 'all': // 6 месяцев по умолчанию
             dateFrom = getSixMonthsAgoDate();
             break;
-        case 'сегодня':
+        case 'today':
             dateFrom = getTodayDate();
             break;
-        case 'неделя':
+        case 'week':
             today.setDate(today.getDate() - 7);
             dateFrom = today.toISOString().split('T')[0];
             break;
-        case 'месяц':
+        case 'month':
             today.setMonth(today.getMonth() - 1);
             dateFrom = today.toISOString().split('T')[0];
             break;
-        case 'период':
+        case 'custom':
+            dateFrom = customDateFrom || getSixMonthsAgoDate();
+            dateTo = customDateTo || getTodayDate();
+            break;
         default:
-            if (filter !== 'all') {
-                dateFrom = DEFAULT_DATE_FROM;
-            }
+            dateFrom = getSixMonthsAgoDate();
             break;
     }
     return { dateFrom, dateTo };
 }
 
-// Утилита для форматирования даты
-const getFormattedDate = (dateString?: string) => {
-    if (!dateString) return "-";
-    try {
-        const date = new Date(dateString);
-        // Проверка на корректность даты (если это 1970 год, значит, дата, скорее всего, невалидна)
-        if (date.getFullYear() < 2000) return dateString; 
-        return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    } catch {
-        return dateString;
-    }
-}
+// --- КОМПОНЕНТЫ ---
 
-// Утилита для получения статуса
-const getStatusLabel = (state?: string) => {
-    if (!state) return "Неизвестен";
-    const statusMap: { [key: string]: string } = {
-        'accepted': 'Принят к перевозке',
-        'in_transit': 'В пути',
-        'ready': 'Готов к выдаче',
-        'delivering': 'На доставке',
-        'delivered': 'Вручен',
-    };
-    return statusMap[state.toLowerCase()] || state;
-}
-
-// --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ ---
-
-// Компонент переключателя (тумблер)
-type SwitchProps = {
-    checked: boolean;
-    onChange: (checked: boolean) => void;
-    label: React.ReactNode;
-};
-
-const Switch: React.FC<SwitchProps> = ({ checked, onChange, label }) => {
-    const id = useMemo(() => `switch-${Math.random().toString(36).substring(2, 9)}`, []);
-    return (
-        <div className="checkbox-row">
-            <label htmlFor={id}>
-                {label}
-            </label>
-            <div 
-                className={`switch-container ${checked ? 'checked' : ''}`} 
-                onClick={() => onChange(!checked)}
-            >
-                <input 
-                    type="checkbox" 
-                    id={id}
-                    checked={checked} 
-                    onChange={() => onChange(!checked)}
-                    className="sr-only" 
-                />
-                <div className="switch-knob"></div>
-            </div>
-        </div>
-    );
-};
-
-// Компонент индикатора загрузки
-const LoadingIndicator: React.FC = () => (
-    <div className="flex justify-center items-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin text-theme-primary" />
-        <span className="ml-3 text-lg font-semibold">Загрузка данных...</span>
-    </div>
-);
-
-// Компонент сообщения об ошибке
-const ErrorAlert: React.FC<{ message: string }> = ({ message }) => (
-    <div className="login-error flex items-start">
-        <AlertTriangle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
-        <p className="m-0 break-words">{message}</p>
-    </div>
-);
-
-
-// --- СТРАНИЦЫ ПРИЛОЖЕНИЯ: АВТОРИЗАЦИЯ ---
-
-type LoginScreenProps = {
-    login: string;
-    setLogin: (login: string) => void;
-    password: string;
-    setPassword: (password: string) => void;
-    agreeOffer: boolean;
-    setAgreeOffer: (agree: boolean) => void;
-    agreePersonal: boolean;
-    setAgreePersonal: (agree: boolean) => void;
-    loading: boolean;
-    error: string | null;
-    handleSubmit: (e: FormEvent) => void;
-    theme: string;
-    toggleTheme: () => void;
-}
-
-const LoginScreen: React.FC<LoginScreenProps> = ({
-    login, setLogin, password, setPassword,
-    agreeOffer, setAgreeOffer, agreePersonal, setAgreePersonal,
-    loading, error, handleSubmit, theme, toggleTheme
-}) => {
-    const [showPassword, setShowPassword] = useState(false);
-
-    return (
-        <div className="login-form-wrapper flex flex-col min-h-screen">
-             <button
-                onClick={toggleTheme}
-                className="theme-toggle-button absolute top-4 right-4 p-2 rounded-full hover:bg-theme-hover-bg transition"
-                aria-label="Toggle theme"
-            >
-                {theme === 'dark' ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
-            </button>
-            <div className="login-card">
-                <div className="text-center mb-6">
-                    <h1 className="logo-text">LAL-AUTO</h1>
-                    <p className="tagline">Личный кабинет клиента</p>
-                </div>
-                <form onSubmit={handleSubmit} className="form">
-                    <div className="field">
-                        <label className="block text-sm font-medium mb-1 text-theme-secondary" htmlFor="login">
-                            Логин
-                        </label>
-                        <input
-                            id="login"
-                            type="email"
-                            placeholder="Ваш email"
-                            value={login}
-                            onChange={(e) => setLogin(e.target.value)}
-                            className="login-input"
-                            disabled={loading}
-                            autoComplete="username"
-                        />
-                    </div>
-                    <div className="field">
-                         <label className="block text-sm font-medium mb-1 text-theme-secondary" htmlFor="password">
-                            Пароль
-                        </label>
-                        <div className="password-input-container">
-                            <input
-                                id="password"
-                                type={showPassword ? "text" : "password"}
-                                placeholder="Ваш пароль"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="login-input"
-                                disabled={loading}
-                                autoComplete="current-password"
-                            />
-                             <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="toggle-password-visibility"
-                                aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
-                                disabled={loading}
-                            >
-                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <Switch 
-                        checked={agreeOffer} 
-                        onChange={setAgreeOffer} 
-                        label={<>Согласен с условиями <a href="#" onClick={(e) => e.preventDefault()}>публичной оферты</a></>} 
-                    />
-                    
-                    <Switch 
-                        checked={agreePersonal} 
-                        onChange={setAgreePersonal} 
-                        label={<>Согласен на обработку <a href="#" onClick={(e) => e.preventDefault()}>персональных данных</a></>} 
-                    />
-
-                    {error && <ErrorAlert message={error} />}
-
-                    <button
-                        type="submit"
-                        className="button-primary mt-4"
-                        disabled={loading || !agreeOffer || !agreePersonal}
-                    >
-                        {loading ? (
-                            <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                        ) : (
-                            "Войти"
-                        )}
-                    </button>
-                </form>
-            </div>
-        </div>
-    );
-}
-
-
-// --- СТРАНИЦЫ ПРИЛОЖЕНИЯ: ГРУЗЫ (CARGO) ---
-
-// Компонент карточки груза
-type CargoCardProps = {
-    item: CargoItem;
-    onClick: (item: CargoItem) => void;
-};
-
-const CargoCard: React.FC<CargoCardProps> = ({ item, onClick }) => {
-    const status = getStatusLabel(item.State);
-    const isSuccess = item.State?.toLowerCase() === 'delivered';
-    const isPaid = item.StatusSchet?.toLowerCase() === 'оплачен';
-
-    return (
-        <div className="cargo-card" onClick={() => onClick(item)}>
-            <div className="cargo-header-row">
-                <span className="order-number">№ {item.Number || '—'}</span>
-                <div className="date">
-                    <Calendar className="w-4 h-4 mr-1 text-theme-secondary" />
-                    <span>{getFormattedDate(item.DatePrih)}</span>
-                </div>
-            </div>
-
-            <div className="cargo-details-grid">
-                <div className="detail-item">
-                    <Package className="w-5 h-5 text-theme-secondary" />
-                    <span className="detail-item-value">{item.Mest || '0'}</span>
-                    <span className="detail-item-label">Мест</span>
-                </div>
-                <div className="detail-item">
-                    <Weight className="w-5 h-5 text-theme-secondary" />
-                    <span className="detail-item-value">{item.Weight || '0'} кг</span>
-                    <span className="detail-item-label">Вес</span>
-                </div>
-                <div className="detail-item">
-                    <Layers className="w-5 h-5 text-theme-secondary" />
-                    <span className="detail-item-value">{item.Volume || '0'} м³</span>
-                    <span className="detail-item-label">Объем</span>
-                </div>
-            </div>
-
-            <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-semibold text-theme-secondary">Статус:</span>
-                <span className={`status-value ${isSuccess ? 'success' : ''}`}>
-                    {status}
-                </span>
-            </div>
-             <div className="flex justify-between items-center">
-                <span className="text-sm font-semibold text-theme-secondary">Счет:</span>
-                <span className={`status-value ${isPaid ? 'success' : 'text-red-400'}`}>
-                    {item.StatusSchet || 'Не выставлен'}
-                </span>
-            </div>
-
-            <div className="cargo-footer">
-                <div className="flex items-center">
-                    <DollarSign className="w-5 h-5 mr-1 text-theme-primary" />
-                    <span className="sum-label">Сумма:</span>
-                </div>
-                <span className="sum-value">{item.Sum ? `${(typeof item.Sum === 'number' ? item.Sum : parseFloat(item.Sum)).toLocaleString('ru-RU')} ₽` : '—'}</span>
-            </div>
-        </div>
-    );
-};
-
-// Модальное окно деталей груза
-type CargoDetailModalProps = {
-    item: CargoItem | null;
-    onClose: () => void;
-};
-
-const DetailItem: React.FC<{ label: string, value: string | number, icon: React.ReactNode, isHighlighted?: boolean }> = ({ label, value, icon, isHighlighted }) => (
-    <div className={`details-item-modal ${isHighlighted ? 'highlighted-detail' : ''}`}>
-        <div className="details-label flex items-center mb-1">
-            {icon}
-            <span className="ml-1">{label}</span>
-        </div>
-        <div className="details-value font-bold text-lg">
-            {value}
-        </div>
-    </div>
-);
-
-const CargoDetailModal: React.FC<CargoDetailModalProps> = ({ item, onClose }) => {
-    if (!item) return null;
-
-    const status = getStatusLabel(item.State);
-    const isPaid = item.StatusSchet?.toLowerCase() === 'оплачен';
-
-    return (
-        <div className="modal-overlay">
-            <div className="modal-content">
-                <div className="modal-header">
-                    <h3>Детали перевозки № {item.Number || '—'}</h3>
-                    <button onClick={onClose} className="modal-close-button" aria-label="Закрыть">
-                        <X className="w-6 h-6" />
-                    </button>
-                </div>
-                
-                {/* Секция документов */}
-                <div className="document-buttons">
-                    <button className="doc-button">
-                        <FileTextIcon className="w-4 h-4 mr-1" />
-                        Акт
-                    </button>
-                    <button className="doc-button">
-                        <FileTextIcon className="w-4 h-4 mr-1" />
-                        Счет
-                    </button>
-                    <button className="doc-button">
-                        <FileTextIcon className="w-4 h-4 mr-1" />
-                        ТТН
-                    </button>
-                    <button className="doc-button">
-                        <Download className="w-4 h-4 mr-1" />
-                        Все
-                    </button>
-                </div>
-
-                <div className="details-grid-modal">
-                    <DetailItem 
-                        label="Дата приема" 
-                        value={getFormattedDate(item.DatePrih)} 
-                        icon={<Calendar className="w-4 h-4" />}
-                    />
-                    <DetailItem 
-                        label="Дата вручения" 
-                        value={item.State?.toLowerCase() === 'delivered' ? getFormattedDate(item.DateVruch) : '—'} 
-                        icon={<Calendar className="w-4 h-4" />}
-                    />
-                    <DetailItem 
-                        label="Статус" 
-                        value={status} 
-                        icon={<Tag className="w-4 h-4" />}
-                        isHighlighted
-                    />
-                    <DetailItem 
-                        label="Сумма счета" 
-                        value={item.Sum ? `${(typeof item.Sum === 'number' ? item.Sum : parseFloat(item.Sum)).toLocaleString('ru-RU')} ₽` : '—'} 
-                        icon={<DollarSign className="w-4 h-4" />}
-                    />
-                     <DetailItem 
-                        label="Статус счета" 
-                        value={item.StatusSchet || '—'} 
-                        icon={<List className="w-4 h-4" />}
-                        isHighlighted={!isPaid}
-                    />
-                    <DetailItem 
-                        label="Мест" 
-                        value={item.Mest || '0'} 
-                        icon={<Package className="w-4 h-4" />}
-                    />
-                    <DetailItem 
-                        label="Платный вес (PV)" 
-                        value={`${item.PV || '0'} кг`} 
-                        icon={<Scale className="w-4 h-4" />}
-                    />
-                    <DetailItem 
-                        label="Общий вес" 
-                        value={`${item.Weight || '0'} кг`} 
-                        icon={<Weight className="w-4 h-4" />}
-                    />
-                    <DetailItem 
-                        label="Объем" 
-                        value={`${item.Volume || '0'} м³`} 
-                        icon={<Layers className="w-4 h-4" />}
-                    />
-                    
-                </div>
-                
-                {/* Дополнительная информация */}
-                <div className="details-item-modal">
-                    <div className="details-label flex items-center mb-1">
-                        <UserIcon className="w-4 h-4" />
-                        <span className="ml-1">Отправитель</span>
-                    </div>
-                    <div className="details-value font-semibold">
-                        {item.SenderName || '—'}
-                    </div>
-                </div>
-
-                <div className="modal-button-container">
-                    <button className="button-primary" onClick={onClose}>
-                        ОК
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Компонент выпадающего списка фильтра
-type FilterDropdownProps<T> = {
+type TabButtonProps = {
     label: string;
     icon: React.ReactNode;
-    options: { value: T; label: string; }[];
-    selectedValue: T;
-    onChange: (value: T) => void;
+    active: boolean;
+    onClick: () => void;
 };
 
-const FilterDropdown = <T extends string>({
-    label, icon, options, selectedValue, onChange
-}: FilterDropdownProps<T>) => {
-    const [isOpen, setIsOpen] = useState(false);
-    
-    const selectedOption = options.find(opt => opt.value === selectedValue);
-
-    const handleSelect = (value: T) => {
-        onChange(value);
-        setIsOpen(false);
-    };
-
-    // Закрытие при клике вне
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (event.target instanceof Element && !event.target.closest('.filter-group')) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
+function TabButton({ label, icon, active, onClick }: TabButtonProps) {
     return (
-        <div className="filter-group">
-            <button 
-                className="filter-button" 
-                onClick={() => setIsOpen(!isOpen)}
-                aria-expanded={isOpen}
-            >
-                <div className="flex items-center">
-                    {icon}
-                    <span className="ml-2">{selectedOption?.label || label}</span>
-                </div>
-                <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'}`} />
-            </button>
-            
-            {isOpen && (
-                <div className="filter-dropdown">
-                    {options.map((option) => (
-                        <div 
-                            key={option.value} 
-                            className={`dropdown-item ${option.value === selectedValue ? 'selected' : ''}`}
-                            onClick={() => handleSelect(option.value)}
-                        >
-                            {option.label}
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-};
-
-// Модальное окно для выбора произвольного периода
-type DateRangeModalProps = {
-    initialDateFrom: string;
-    initialDateTo: string;
-    onApply: (from: string, to: string) => void;
-    onClose: () => void;
-};
-
-const DateRangeModal: React.FC<DateRangeModalProps> = ({ initialDateFrom, initialDateTo, onApply, onClose }) => {
-    const [dateFrom, setDateFrom] = useState(initialDateFrom);
-    const [dateTo, setDateTo] = useState(initialDateTo);
-    const [error, setError] = useState<string | null>(null);
-
-    const handleApply = () => {
-        if (!dateFrom || !dateTo) {
-            setError("Выберите обе даты.");
-            return;
-        }
-        if (dateFrom > dateTo) {
-            setError("Начальная дата не может быть позже конечной.");
-            return;
-        }
-        setError(null);
-        onApply(dateFrom, dateTo);
-    };
-
-    return (
-        <div className="modal-overlay">
-            <div className="modal-content max-w-sm">
-                <div className="modal-header">
-                    <h3>Выбор периода</h3>
-                    <button onClick={onClose} className="modal-close-button" aria-label="Закрыть">
-                        <X className="w-6 h-6" />
-                    </button>
-                </div>
-                
-                <div className="mb-4">
-                    <label className="block text-sm font-medium mb-1 text-theme-secondary" htmlFor="dateFrom">
-                        Дата С:
-                    </label>
-                    <input
-                        id="dateFrom"
-                        type="date"
-                        value={dateFrom}
-                        onChange={(e) => setDateFrom(e.target.value)}
-                        className="login-input date-input"
-                    />
-                </div>
-                
-                <div className="mb-4">
-                     <label className="block text-sm font-medium mb-1 text-theme-secondary" htmlFor="dateTo">
-                        Дата ПО:
-                    </label>
-                    <input
-                        id="dateTo"
-                        type="date"
-                        value={dateTo}
-                        onChange={(e) => setDateTo(e.target.value)}
-                        className="login-input date-input"
-                    />
-                </div>
-
-                {error && <ErrorAlert message={error} />}
-
-                <div className="modal-button-container">
-                    <button className="button-primary" onClick={handleApply}>
-                        Применить
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Страница грузов (CargoPage)
-type CargoPageProps = {
-    auth: AuthData;
-    searchText: string;
-};
-
-const CargoPage: React.FC<CargoPageProps> = ({ auth, searchText }) => {
-    const [cargoList, setCargoList] = useState<CargoItem[] | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    
-    const [selectedCargo, setSelectedCargo] = useState<CargoItem | null>(null);
-    
-    // Фильтры
-    const [dateFilter, setDateFilter] = useState<DateFilter>("all");
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-    const [customDateFrom, setCustomDateFrom] = useState(DEFAULT_DATE_FROM);
-    const [customDateTo, setCustomDateTo] = useState(DEFAULT_DATE_TO);
-    const [isCustomDateModalOpen, setIsCustomDateModalOpen] = useState(false);
-    
-    const fetchCargo = useCallback(async (
-        login: string, 
-        password: string, 
-        dateFrom: string, 
-        dateTo: string
-    ) => {
-        setLoading(true);
-        setError(null);
-        
-        try {
-            const res = await fetch(PROXY_API_BASE_URL, {
-                method: "POST", 
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ login, password, dateFrom, dateTo }),
-            });
-            
-            if (!res.ok) {
-                let message = `Ошибка загрузки данных: ${res.status}.`;
-                 try {
-                    const errorData = await res.json() as ApiError;
-                    if (errorData.error) {
-                         message = errorData.error;
-                    }
-                } catch { /* ignore */ }
-                setError(message);
-                setCargoList(null);
-                return;
-            }
-
-            const data = await res.json();
-            
-            if (data && Array.isArray(data.items)) {
-                setCargoList(data.items as CargoItem[]);
-            } else {
-                 setCargoList([]);
-            }
-        } catch (err: any) {
-            setError(err?.message || "Ошибка сети при загрузке грузов.");
-            setCargoList(null);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // Эффект для загрузки данных при монтировании и смене фильтров
-    useEffect(() => {
-        let dateFrom = DEFAULT_DATE_FROM;
-        let dateTo = DEFAULT_DATE_TO;
-
-        if (dateFilter === 'период') {
-            dateFrom = customDateFrom;
-            dateTo = customDateTo;
-        } else {
-            const range = getDateRange(dateFilter);
-            dateFrom = range.dateFrom;
-            dateTo = range.dateTo;
-        }
-
-        fetchCargo(auth.login, auth.password, dateFrom, dateTo);
-    }, [auth, fetchCargo, dateFilter, customDateFrom, customDateTo]); 
-
-    const handleOpenCustomDateModal = () => {
-        setIsCustomDateModalOpen(true);
-    };
-
-    const handleApplyCustomDates = (from: string, to: string) => {
-        setCustomDateFrom(from);
-        setCustomDateTo(to);
-        setDateFilter('период'); 
-        setIsCustomDateModalOpen(false);
-    };
-
-    // Фильтрация списка грузов по статусу и поиску
-    const filteredCargo = useMemo(() => {
-        if (!cargoList) return null;
-
-        let list = cargoList;
-
-        // 1. Фильтрация по статусу
-        if (statusFilter !== 'all') {
-            list = list.filter(item => 
-                item.State?.toLowerCase() === statusFilter
-            );
-        }
-
-        // 2. Фильтрация по поиску (номер, отправитель, получатель)
-        if (searchText) {
-            const search = searchText.toLowerCase();
-            list = list.filter(item =>
-                (item.Number && item.Number.toLowerCase().includes(search)) ||
-                (item.SenderName && item.SenderName.toLowerCase().includes(search)) ||
-                (item.RecipientName && item.RecipientName.toLowerCase().includes(search))
-            );
-        }
-
-        return list;
-    }, [cargoList, statusFilter, searchText]);
-
-
-    // Опции для фильтра по дате
-    const dateOptions: FilterDropdownProps<DateFilter>['options'] = [
-        { value: 'all', label: 'За 6 месяцев' },
-        { value: 'сегодня', label: 'Сегодня' },
-        { value: 'неделя', label: 'За неделю' },
-        { value: 'месяц', label: 'За месяц' },
-        { 
-            value: 'период', 
-            label: dateFilter === 'период' 
-                ? `${getFormattedDate(customDateFrom)} - ${getFormattedDate(customDateTo)}` 
-                : 'Выбрать период' 
-        },
-    ];
-
-    // Опции для фильтра по статусу
-    const statusOptions: FilterDropdownProps<StatusFilter>['options'] = [
-        { value: 'all', label: 'Все статусы' },
-        { value: 'accepted', label: getStatusLabel('accepted') },
-        { value: 'in_transit', label: getStatusLabel('in_transit') },
-        { value: 'ready', label: getStatusLabel('ready') },
-        { value: 'delivering', label: getStatusLabel('delivering') },
-        { value: 'delivered', label: getStatusLabel('delivered') },
-    ];
-    
-    return (
-        <div className="w-full max-w-4xl">
-            <h2 className="title">Ваши перевозки</h2>
-            
-            {/* Контейнер фильтров */}
-            <div className="filters-container">
-                {/* Фильтр по дате */}
-                <FilterDropdown<DateFilter>
-                    label="Дата"
-                    icon={<Calendar className="w-4 h-4" />}
-                    options={dateOptions}
-                    selectedValue={dateFilter}
-                    onChange={(value) => {
-                        if (value === 'период') {
-                            handleOpenCustomDateModal();
-                        } else {
-                            setDateFilter(value);
-                        }
-                    }}
-                />
-
-                {/* Фильтр по статусу */}
-                <FilterDropdown<StatusFilter>
-                    label="Статус"
-                    icon={<Tag className="w-4 h-4" />}
-                    options={statusOptions}
-                    selectedValue={statusFilter}
-                    onChange={setStatusFilter}
-                />
-            </div>
-            
-            {loading && <LoadingIndicator />}
-            {error && <ErrorAlert message={error} />}
-
-            {!loading && !error && filteredCargo && (
-                <>
-                    <p className="subtitle">
-                        Найдено: {filteredCargo.length} из {cargoList?.length || 0}
-                    </p>
-                    {filteredCargo.length > 0 ? (
-                        <div className="cargo-list">
-                            {filteredCargo.map((item, index) => (
-                                <CargoCard key={index} item={item} onClick={setSelectedCargo} />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="empty-state-card text-theme-secondary">
-                             <Filter className="w-12 h-12 mx-auto mb-4" />
-                            <h3 className="text-xl font-bold text-theme-primary">
-                                Грузы не найдены
-                            </h3>
-                            <p className="text-sm mt-2">
-                                Попробуйте изменить фильтры или сбросить поиск.
-                            </p>
-                            <button 
-                                className="text-sm mt-4 text-theme-primary hover:text-theme-text flex items-center mx-auto"
-                                onClick={() => {
-                                    setDateFilter('all'); 
-                                    setStatusFilter('all');
-                                }}
-                            >
-                                <X className="w-4 h-4 mr-1" />
-                                Сбросить все фильтры
-                            </button>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {/* Модальное окно деталей груза */}
-            <CargoDetailModal item={selectedCargo} onClose={() => setSelectedCargo(null)} />
-            
-            {/* Модальное окно выбора периода */}
-            {isCustomDateModalOpen && (
-                 <DateRangeModal 
-                    initialDateFrom={customDateFrom}
-                    initialDateTo={customDateTo}
-                    onApply={handleApplyCustomDates}
-                    onClose={() => setIsCustomDateModalOpen(false)}
-                 />
-            )}
-        </div>
-    );
-};
-
-// --- СТРАНИЦЫ ПРИЛОЖЕНИЯ: ЗАГЛУШКИ ---
-
-const HomePage: React.FC = () => (
-    <div className="w-full max-w-4xl text-center p-8">
-        <Home className="w-12 h-12 mx-auto mb-4 text-theme-primary" />
-        <h2 className="title">Главная страница</h2>
-        <p className="subtitle">Добро пожаловать в личный кабинет!</p>
-        <div className="empty-state-card">
-            <p className="text-theme-secondary">Здесь будет общая информация и дашборд.</p>
-        </div>
-    </div>
-);
-
-const DocsPage: React.FC = () => (
-    <div className="w-full max-w-4xl text-center p-8">
-        <FileText className="w-12 h-12 mx-auto mb-4 text-theme-primary" />
-        <h2 className="title">Документы</h2>
-        <p className="subtitle">Ваши счета, акты и накладные.</p>
-        <div className="empty-state-card">
-            <p className="text-theme-secondary">Раздел находится в разработке.</p>
-        </div>
-    </div>
-);
-
-const SupportPage: React.FC = () => (
-    <div className="w-full max-w-4xl text-center p-8">
-        <MessageCircle className="w-12 h-12 mx-auto mb-4 text-theme-primary" />
-        <h2 className="title">Поддержка</h2>
-        <p className="subtitle">Связаться с нами.</p>
-        <div className="empty-state-card">
-            <p className="text-theme-secondary">Чат с поддержкой и ответы на частые вопросы.</p>
-        </div>
-    </div>
-);
-
-const ProfilePage: React.FC<{ auth: AuthData, onLogout: () => void, theme: string, toggleTheme: () => void }> = ({ auth, onLogout, theme, toggleTheme }) => (
-    <div className="w-full max-w-4xl p-8">
-        <h2 className="title flex items-center">
-            <UserIcon className="w-6 h-6 mr-2 text-theme-primary" /> Профиль
-        </h2>
-        <p className="subtitle">Настройки аккаунта и выход.</p>
-        
-        <div className="info-card">
-            <div className="info-item">
-                <span className="info-label">Логин:</span>
-                <span className="info-value">{auth.login}</span>
-            </div>
-            <div className="info-item">
-                <span className="info-label">Тема:</span>
-                <div className="info-value flex items-center">
-                    <span>{theme === 'dark' ? 'Темная' : 'Светлая'}</span>
-                    <button
-                        onClick={toggleTheme}
-                        className="theme-toggle-button ml-4 p-1 rounded-full hover:bg-theme-hover-bg transition"
-                        aria-label="Toggle theme"
-                    >
-                        {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <button 
-            onClick={onLogout} 
-            className="button-primary logout-button mt-8 flex items-center justify-center"
+        <button
+            type="button"
+            className={`tab-button ${active ? 'active' : ''}`}
+            onClick={onClick}
         >
-            <LogOut className="w-5 h-5 mr-2" />
-            Выйти
+            <span className="tab-icon">{icon}</span>
+            <span className="tab-label">{label}</span>
         </button>
-    </div>
-);
-
-
-// --- КОМПОНЕНТЫ НАВИГАЦИИ (TAB BAR) ---
+    );
+}
 
 type TabBarProps = {
     active: Tab;
@@ -955,51 +162,566 @@ function TabBar({ active, onChange }: TabBarProps) {
     );
 }
 
-type TabButtonProps = {
-    label: string;
-    icon: React.ReactNode;
-    active: boolean;
-    onClick: () => void;
+type AppHeaderProps = {
+    login: string;
+    isSearchExpanded: boolean;
+    onSearchToggle: () => void;
+    searchText: string;
+    onSearchChange: (text: string) => void;
 };
 
-function TabButton({ label, icon, active, onClick }: TabButtonProps) {
+function AppHeader({ login, isSearchExpanded, onSearchToggle, searchText, onSearchChange }: AppHeaderProps) {
     return (
-        <button
-            type="button"
-            className={`tab-button ${active ? 'active' : ''}`}
-            onClick={onClick}
-        >
-            <span className="tab-icon">{icon}</span>
-            <span className="tab-label">{label}</span>
-        </button>
+        <header className="app-header">
+            <div className="header-top-row">
+                <div className="logo-text text-xl">HAULZ</div>
+                <div className="header-auth-info">
+                    <UserIcon className="w-4 h-4 user-icon" />
+                    <span>{login}</span>
+                </div>
+                <button type="button" className="search-toggle-button ml-4" onClick={onSearchToggle}>
+                    {isSearchExpanded ? <X className="w-6 h-6" /> : <Search className="w-6 h-6" />}
+                </button>
+            </div>
+            <div className={`search-container ${isSearchExpanded ? 'expanded' : 'collapsed'}`}>
+                <Search className="w-4 h-4 text-theme-secondary ml-2" />
+                <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Поиск по номеру или городу..."
+                    value={searchText}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                />
+            </div>
+        </header>
+    );
+}
+
+type CargoDetailModalProps = {
+    cargo: CargoItem;
+    onClose: () => void;
+};
+
+function CargoDetailModal({ cargo, onClose }: CargoDetailModalProps) {
+    const statusInfo = STATUS_MAP[cargo.State?.toLowerCase() || ''] || { label: cargo.State || 'Неизвестно', color: 'pending' };
+
+    const formatValue = (value: number | string | undefined) => {
+        if (typeof value === 'number') return value.toFixed(2);
+        return value || '—';
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3>Заказ № {cargo.Number}</h3>
+                    <button type="button" className="modal-close-button" onClick={onClose}>
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                
+                <div className="document-buttons">
+                    <button className="doc-button" disabled={!cargo.TTNLink}>
+                        <Download className="w-4 h-4 mr-1" /> ТТН
+                    </button>
+                    <button className="doc-button" disabled={!cargo.SchetLink}>
+                        <FileTextIcon className="w-4 h-4 mr-1" /> Счет
+                    </button>
+                    <button className="doc-button" disabled={!cargo.AktLink}>
+                        <List className="w-4 h-4 mr-1" /> Акт
+                    </button>
+                </div>
+
+                <div className="details-grid-modal">
+                    <div className="details-item-modal">
+                        <div className="details-label">Статус</div>
+                        <div className={`details-value status-value ${statusInfo.color === 'success' ? 'success' : ''} ${statusInfo.color === 'danger' ? 'text-red-400' : ''}`}>
+                            {statusInfo.label}
+                        </div>
+                    </div>
+                    <div className="details-item-modal">
+                        <div className="details-label">Дата прихода</div>
+                        <div className="details-value">{cargo.DatePrih || '—'}</div>
+                    </div>
+                    {cargo.DateVruch && (
+                        <div className="details-item-modal highlighted-detail">
+                            <div className="details-label">Дата вручения</div>
+                            <div className="details-value">{cargo.DateVruch}</div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="details-grid-modal">
+                    <div className="details-item-modal">
+                        <div className="details-label">Кол-во мест</div>
+                        <div className="details-value flex items-center">
+                            <Layers className="w-4 h-4 mr-2 text-theme-secondary" /> {formatValue(cargo.Mest)}
+                        </div>
+                    </div>
+                    <div className="details-item-modal">
+                        <div className="details-label">Общий вес, кг</div>
+                        <div className="details-value flex items-center">
+                            <Weight className="w-4 h-4 mr-2 text-theme-secondary" /> {formatValue(cargo.Weight)}
+                        </div>
+                    </div>
+                    <div className="details-item-modal">
+                        <div className="details-label">Платный вес, кг</div>
+                        <div className="details-value flex items-center">
+                            <Scale className="w-4 h-4 mr-2 text-theme-secondary" /> {formatValue(cargo.PV)}
+                        </div>
+                    </div>
+                    <div className="details-item-modal">
+                        <div className="details-label">Объем, м³</div>
+                        <div className="details-value flex items-center">
+                            <Package className="w-4 h-4 mr-2 text-theme-secondary" /> {formatValue(cargo.Volume)}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="info-card mt-4 p-4">
+                    <div className="info-item">
+                        <div className="info-label">Отправитель</div>
+                        <div className="info-value">{cargo.SenderCity || '—'}</div>
+                    </div>
+                    <div className="info-item">
+                        <div className="info-label">Получатель</div>
+                        <div className="info-value">{cargo.ReceiverCity || '—'}</div>
+                    </div>
+                </div>
+                
+                <div className="modal-button-container">
+                    <button className="button-primary" onClick={onClose}>Закрыть</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+type CargoCardProps = {
+    cargo: CargoItem;
+    onClick: (cargo: CargoItem) => void;
+};
+
+function CargoCard({ cargo, onClick }: CargoCardProps) {
+    const statusInfo = useMemo(() => STATUS_MAP[cargo.State?.toLowerCase() || ''] || { label: cargo.State || 'Неизвестно', color: 'pending' }, [cargo.State]);
+
+    const formatValue = (value: number | string | undefined, isCurrency = false) => {
+        if (typeof value === 'number') {
+            const formatted = value.toLocaleString('ru-RU', {
+                minimumFractionDigits: isCurrency ? 2 : 0,
+                maximumFractionDigits: isCurrency ? 2 : 0,
+            });
+            return isCurrency ? formatted.replace(',', ' ') : formatted;
+        }
+        return value || '—';
+    };
+
+    return (
+        <div className="cargo-card" onClick={() => onClick(cargo)}>
+            <div className="cargo-header-row">
+                <span className="order-number">Заказ № {cargo.Number}</span>
+                <span className={`status-value ${statusInfo.color === 'success' ? 'success' : ''} ${statusInfo.color === 'danger' ? 'text-red-400' : ''}`}>
+                    {statusInfo.label}
+                </span>
+            </div>
+            
+            <div className="text-sm text-theme-secondary mb-2">
+                <span className="font-semibold text-theme-text">{cargo.SenderCity}</span>
+                <span className="mx-2">→</span>
+                <span className="font-semibold text-theme-text">{cargo.ReceiverCity}</span>
+            </div>
+
+            <div className="cargo-details-grid">
+                <div className="detail-item">
+                    <div className="detail-item-value">{formatValue(cargo.Weight)}</div>
+                    <div className="detail-item-label">Вес, кг</div>
+                </div>
+                <div className="detail-item">
+                    <div className="detail-item-value">{formatValue(cargo.Volume)}</div>
+                    <div className="detail-item-label">Объем, м³</div>
+                </div>
+                <div className="detail-item">
+                    <div className="detail-item-value">{formatValue(cargo.Mest)}</div>
+                    <div className="detail-item-label">Мест</div>
+                </div>
+            </div>
+
+            <div className="cargo-footer">
+                <div className="date">
+                    <Calendar className="w-4 h-4 mr-1" /> 
+                    {cargo.DatePrih || 'Дата не указана'}
+                </div>
+                <div className="sum-wrapper">
+                    <span className="sum-label">Сумма: </span>
+                    <span className="sum-value">{formatValue(cargo.Sum, true)} ₽</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+type StatusFilterDropdownProps = {
+    selected: StatusFilter;
+    onSelect: (status: StatusFilter) => void;
+};
+
+function StatusFilterDropdown({ selected, onSelect }: StatusFilterDropdownProps) {
+    const [isOpen, setIsOpen] = useState(false);
+    const options: { value: StatusFilter, label: string }[] = [
+        { value: 'all', label: 'Все статусы' },
+        { value: 'accepted', label: 'Принят' },
+        { value: 'in_transit', label: 'В пути' },
+        { value: 'ready', label: 'Готов к выдаче' },
+        { value: 'delivering', label: 'Доставка' },
+        { value: 'delivered', label: 'Доставлен' },
+    ];
+    
+    const selectedOption = options.find(o => o.value === selected) || options[0];
+
+    useEffect(() => {
+        const handleClickOutside = () => setIsOpen(false);
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div className="filter-group" style={{ minWidth: '150px' }}>
+            <button className="filter-button" onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}>
+                <span>{selectedOption.label}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'}`} />
+            </button>
+            {isOpen && (
+                <div className="filter-dropdown">
+                    {options.map(option => (
+                        <div 
+                            key={option.value}
+                            className={`dropdown-item ${selected === option.value ? 'selected' : ''}`}
+                            onClick={() => { onSelect(option.value); setIsOpen(false); }}
+                        >
+                            {option.label}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+type DateFilterDropdownProps = {
+    selected: DateFilter;
+    onSelect: (filter: DateFilter) => void;
+    customDateFrom: string;
+    setCustomDateFrom: (date: string) => void;
+    customDateTo: string;
+    setCustomDateTo: (date: string) => void;
+};
+
+function DateFilterDropdown({ selected, onSelect, customDateFrom, setCustomDateFrom, customDateTo, setCustomDateTo }: DateFilterDropdownProps) {
+    const [isOpen, setIsOpen] = useState(false);
+    const options: { value: DateFilter, label: string }[] = [
+        { value: 'all', label: 'За 6 месяцев' },
+        { value: 'today', label: 'Сегодня' },
+        { value: 'week', label: 'За неделю' },
+        { value: 'month', label: 'За месяц' },
+        { value: 'custom', label: 'Выбрать период' },
+    ];
+    
+    const selectedOption = options.find(o => o.value === selected) || options[0];
+
+    const handleSelect = (filter: DateFilter) => {
+        onSelect(filter);
+        if (filter !== 'custom') {
+            setIsOpen(false);
+        }
+    }
+
+    const handleApplyCustom = () => {
+        if (customDateFrom && customDateTo) {
+            setIsOpen(false);
+        }
+    }
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            // Проверяем, что клик не произошел внутри dropdown
+            if (target.closest('.filter-group') === null) {
+                 setIsOpen(false);
+            }
+        };
+        if(isOpen) {
+             document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    return (
+        <div className="filter-group" style={{ minWidth: '180px' }}>
+            <button className="filter-button" onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}>
+                <span>{selectedOption.label}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'}`} />
+            </button>
+            {isOpen && (
+                <div className="filter-dropdown" onClick={(e) => e.stopPropagation()}>
+                    {options.map(option => (
+                        <div 
+                            key={option.value}
+                            className={`dropdown-item ${selected === option.value ? 'selected' : ''}`}
+                            onClick={() => handleSelect(option.value)}
+                        >
+                            {option.label}
+                        </div>
+                    ))}
+                    {selected === 'custom' && (
+                        <div className="p-4 border-t border-theme-border flex flex-col gap-3">
+                            <label className="text-xs text-theme-secondary font-semibold">Дата от:</label>
+                            <input
+                                type="date"
+                                className="login-input date-input"
+                                value={customDateFrom}
+                                onChange={(e) => setCustomDateFrom(e.target.value)}
+                            />
+                            <label className="text-xs text-theme-secondary font-semibold">Дата до:</label>
+                            <input
+                                type="date"
+                                className="login-input date-input"
+                                value={customDateTo}
+                                onChange={(e) => setCustomDateTo(e.target.value)}
+                            />
+                            <button className="button-primary" onClick={handleApplyCustom}>Применить</button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+type CargoPageProps = {
+    auth: AuthData;
+    searchText: string;
+};
+
+function CargoPage({ auth, searchText }: CargoPageProps) {
+    const [cargoList, setCargoList] = useState<CargoItem[] | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedCargo, setSelectedCargo] = useState<CargoItem | null>(null);
+
+    const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+    const [customDateFrom, setCustomDateFrom] = useState(getSixMonthsAgoDate());
+    const [customDateTo, setCustomDateTo] = useState(getTodayDate());
+
+    const fetchCargo = useCallback(async (dateFilterType: DateFilter, dateFrom: string, dateTo: string) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch(PROXY_API_BASE_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    login: auth.login,
+                    password: auth.password,
+                    dateFrom: dateFrom,
+                    dateTo: dateTo
+                }),
+            });
+
+            if (!res.ok) {
+                const message = `Ошибка загрузки грузов: ${res.status}.`;
+                setError(message);
+                setCargoList([]);
+                return;
+            }
+
+            const data = await res.json() as { perevozki?: CargoItem[], error?: string };
+            
+            if (data.error) {
+                setError(data.error);
+                setCargoList([]);
+                return;
+            }
+
+            // Убедимся, что Number и City поля не null
+            const cleanData = (data.perevozki || []).map(item => ({
+                ...item,
+                Number: item.Number || `Нет номера (${Math.random().toString(36).substr(2, 9)})`,
+                SenderCity: item.SenderCity || 'Город отправки',
+                ReceiverCity: item.ReceiverCity || 'Город назначения',
+            }));
+
+            setCargoList(cleanData);
+        } catch (err: any) {
+            setError(err?.message || "Ошибка сети при загрузке грузов.");
+            setCargoList([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [auth]);
+
+    useEffect(() => {
+        const { dateFrom, dateTo } = getDateRange(dateFilter, customDateFrom, customDateTo);
+        fetchCargo(dateFilter, dateFrom, dateTo);
+    }, [fetchCargo, dateFilter, customDateFrom, customDateTo]);
+
+    const filteredCargo = useMemo(() => {
+        if (!cargoList) return [];
+
+        let list = cargoList;
+        
+        // 1. Фильтр по статусу
+        if (statusFilter !== 'all') {
+            list = list.filter(cargo => cargo.State?.toLowerCase() === statusFilter);
+        }
+
+        // 2. Фильтр по поиску
+        if (searchText) {
+            const searchLower = searchText.toLowerCase();
+            list = list.filter(cargo => 
+                cargo.Number?.toLowerCase().includes(searchLower) ||
+                cargo.SenderCity?.toLowerCase().includes(searchLower) ||
+                cargo.ReceiverCity?.toLowerCase().includes(searchLower)
+            );
+        }
+        
+        return list;
+
+    }, [cargoList, statusFilter, searchText]);
+
+
+    return (
+        <div className="w-full max-w-screen-lg">
+            <h1 className="title">Ваши перевозки</h1>
+            <p className="subtitle">Список грузов за выбранный период и статус.</p>
+
+            <div className="filters-container">
+                <DateFilterDropdown
+                    selected={dateFilter}
+                    onSelect={setDateFilter}
+                    customDateFrom={customDateFrom}
+                    setCustomDateFrom={setCustomDateFrom}
+                    customDateTo={customDateTo}
+                    setCustomDateTo={setCustomDateTo}
+                />
+                <StatusFilterDropdown
+                    selected={statusFilter}
+                    onSelect={setStatusFilter}
+                />
+            </div>
+            
+            {loading && (
+                <div className="text-center p-8 text-theme-secondary">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-theme-primary" />
+                    <p className="mt-2">Загрузка данных...</p>
+                </div>
+            )}
+            
+            {error && !loading && (
+                <div className="login-error my-4">
+                    <AlertTriangle className="w-5 h-5 mr-2" />
+                    {error}
+                </div>
+            )}
+
+            {!loading && !error && filteredCargo.length === 0 && (
+                <div className="empty-state-card text-theme-secondary">
+                    <Truck className="w-12 h-12 mx-auto mb-4 text-theme-primary" />
+                    <p className="title text-theme-text">Грузы не найдены</p>
+                    <p className="subtitle m-0">Попробуйте изменить период или фильтры.</p>
+                </div>
+            )}
+
+            {!loading && filteredCargo.length > 0 && (
+                <div className="cargo-list">
+                    {filteredCargo.map((cargo) => (
+                        <CargoCard 
+                            key={cargo.Number} 
+                            cargo={cargo} 
+                            onClick={setSelectedCargo} 
+                        />
+                    ))}
+                </div>
+            )}
+
+            {selectedCargo && (
+                <CargoDetailModal 
+                    cargo={selectedCargo} 
+                    onClose={() => setSelectedCargo(null)} 
+                />
+            )}
+        </div>
+    );
+}
+
+type ProfilePageProps = {
+    auth: AuthData;
+    onLogout: () => void;
+    onThemeChange: (theme: 'light' | 'dark') => void;
+    currentTheme: 'light' | 'dark';
+};
+
+function ProfilePage({ auth, onLogout, onThemeChange, currentTheme }: ProfilePageProps) {
+    const isDark = currentTheme === 'dark';
+
+    return (
+        <div className="w-full max-w-screen-sm">
+            <h1 className="title">Профиль пользователя</h1>
+            <p className="subtitle">Ваши настройки и информация об аккаунте.</p>
+
+            <div className="info-card">
+                <div className="info-item">
+                    <div className="info-label">Логин (Email)</div>
+                    <div className="info-value">{auth.login}</div>
+                </div>
+                <div className="info-item">
+                    <div className="info-label">Статус</div>
+                    <div className="info-value text-theme-primary">Авторизован</div>
+                </div>
+                <div className="info-item">
+                    <div className="info-label">Дата регистрации</div>
+                    <div className="info-value">12.01.2023</div> {/* Предполагаемое значение */}
+                </div>
+            </div>
+
+            <div className="info-card">
+                <div className="info-item">
+                    <div className="info-label">Темная тема</div>
+                    <div 
+                        className={`switch-container ${isDark ? 'checked' : ''}`} 
+                        onClick={() => onThemeChange(isDark ? 'light' : 'dark')}
+                        role="switch"
+                        aria-checked={isDark}
+                    >
+                        <div className="switch-knob"></div>
+                    </div>
+                </div>
+            </div>
+
+            <button className="button-primary logout-button mt-6" onClick={onLogout}>
+                <LogOut className="w-5 h-5 mr-2" /> Выйти
+            </button>
+        </div>
     );
 }
 
 
-// --- ГЛАВНЫЙ КОМПОНЕНТ ПРИЛОЖЕНИЯ ---
-
 export default function App() {
-    // Состояния для авторизации
     const [login, setLogin] = useState(DEFAULT_LOGIN); 
     const [password, setPassword] = useState(DEFAULT_PASSWORD); 
     const [agreeOffer, setAgreeOffer] = useState(true);
     const [agreePersonal, setAgreePersonal] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false); 
+
     const [auth, setAuth] = useState<AuthData | null>(null);
-    
-    // Состояния для навигации и темы
     const [activeTab, setActiveTab] = useState<Tab>("cargo");
-    const [theme, setTheme] = useState<'light' | 'dark'>('dark'); 
+    const [theme, setTheme] = useState<'dark' | 'light'>('dark'); 
     
     // Состояние для поиска (в шапке)
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [searchText, setSearchText] = useState('');
-
-    // Переключение темы
-    const toggleTheme = useCallback(() => {
-        setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-    }, []);
 
     // Применяем класс темы к body
     useEffect(() => {
@@ -1007,12 +729,12 @@ export default function App() {
     }, [theme]);
 
     
-    // Функция для применения поиска 
+    // Функция для применения поиска (передаем в CargoPage)
     const handleSearch = (text: string) => {
+        // Логика поиска будет передана в CargoPage
         setSearchText(text.toLowerCase().trim());
     }
 
-    // Обработка отправки формы авторизации
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -1033,10 +755,9 @@ export default function App() {
         try {
             setLoading(true);
 
-            // Начальный запрос для проверки авторизации и получения данных за 6 месяцев
-            const { dateFrom, dateTo } = getDateRange("all"); 
+            const { dateFrom, dateTo } = getDateRange("all"); // Начальный запрос на 6 месяцев
             
-            // Отправляем POST-запрос
+            // Отправляем POST-запрос с логином/паролем в теле (для проверки авторизации)
             const res = await fetch(PROXY_API_BASE_URL, {
                 method: "POST", 
                 headers: { "Content-Type": "application/json" },
@@ -1080,50 +801,16 @@ export default function App() {
         }
     };
 
-    // Выход из системы
     const handleLogout = () => {
         setAuth(null);
         setActiveTab("cargo");
         setError(null);
         setPassword(DEFAULT_PASSWORD); 
-        setIsSearchExpanded(false); 
-        setSearchText(''); 
+        setIsSearchExpanded(false); // Сброс
+        setSearchText(''); // Сброс
     }
-    
-    // Выбор содержимого вкладки
-    const renderContent = () => {
-        if (!auth) {
-            return (
-                <LoginScreen 
-                    login={login} setLogin={setLogin}
-                    password={password} setPassword={setPassword}
-                    agreeOffer={agreeOffer} setAgreeOffer={setAgreeOffer}
-                    agreePersonal={agreePersonal} setAgreePersonal={setAgreePersonal}
-                    loading={loading} error={error}
-                    handleSubmit={handleSubmit}
-                    theme={theme}
-                    toggleTheme={toggleTheme}
-                />
-            );
-        }
 
-        switch (activeTab) {
-            case "home":
-                return <HomePage />;
-            case "cargo":
-                return <CargoPage auth={auth} searchText={searchText} />;
-            case "docs":
-                return <DocsPage />;
-            case "support":
-                return <SupportPage />;
-            case "profile":
-                return <ProfilePage auth={auth} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} />;
-            default:
-                return <HomePage />;
-        }
-    };
-
-    // Встраиваем стили (полный блок CSS)
+    // Встраиваем стили
     const injectedStyles = `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
                 
@@ -1275,7 +962,7 @@ export default function App() {
         }
         
         /* --------------------------------- */
-        /* --- PASSWORD INPUT FIX --- */
+        /* --- INPUTS --- */
         /* --------------------------------- */
         .password-input-container {
             position: relative; 
@@ -1372,6 +1059,9 @@ export default function App() {
             cursor: pointer;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .button-primary:hover:not(:disabled) {
             background-color: #2563eb; 
@@ -1387,7 +1077,7 @@ export default function App() {
         .logout-button:hover:not(:disabled) {
             background-color: #b91c1c; /* red-700 */
         }
-        
+
         .app-header {
             padding: 0.5rem 1rem;
             background-color: var(--color-bg-secondary);
@@ -1432,8 +1122,6 @@ export default function App() {
             align-items: center;
             overflow: hidden;
             transition: max-width 0.3s ease-in-out, opacity 0.3s, height 0.3s, margin 0.3s;
-            margin-top: 0.5rem;
-            margin-bottom: 0.5rem;
             border-radius: 0.5rem;
             background-color: var(--color-bg-input);
         }
@@ -1442,6 +1130,8 @@ export default function App() {
             opacity: 1;
             height: 40px;
             padding: 0 0.5rem;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
         }
         .search-container.collapsed {
             max-width: 0;
@@ -1534,7 +1224,7 @@ export default function App() {
             color: white;
             font-weight: 700;
         }
-        
+
         /* --------------------------------- */
         /* --- CARGO LIST STYLES --- */
         /* --------------------------------- */
@@ -1605,8 +1295,6 @@ export default function App() {
         .status-value {
             font-size: 0.8rem;
             font-weight: 600;
-        }
-        .status-value:not(.success):not(.text-red-400) {
             color: var(--color-pending-status);
         }
         .status-value.success {
@@ -1638,7 +1326,7 @@ export default function App() {
                 gap: 1.5rem;
             }
         }
-        
+
         /* Empty State Card */
         .empty-state-card {
             background-color: var(--color-bg-card);
@@ -1702,7 +1390,7 @@ export default function App() {
         .modal-close-button:hover {
             color: var(--color-text-primary);
         }
-        
+
         /* Cargo Details Specific Styles */
         .document-buttons { 
             display: flex; 
@@ -1725,10 +1413,17 @@ export default function App() {
             min-width: 80px;
             transition: opacity 0.15s;
         }
-        .doc-button:hover {
+        .doc-button:hover:not(:disabled) {
             opacity: 0.9;
         }
-        
+        .doc-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background-color: var(--color-bg-hover);
+            color: var(--color-text-secondary);
+        }
+
+
         .details-grid-modal { 
             display: grid; 
             grid-template-columns: 1fr; 
@@ -1758,12 +1453,13 @@ export default function App() {
         }
         .details-value {
              font-size: 1rem;
+             font-weight: 700;
         }
-        
+
         .modal-button-container {
             margin-top: 1rem;
         }
-        
+
         /* --------------------------------- */
         /* --- PROFILE PAGE STYLES --- */
         /* --------------------------------- */
@@ -1824,7 +1520,7 @@ export default function App() {
             color: var(--color-text-secondary);
             transition: color 0.15s, background-color 0.15s;
             padding: 0.5rem 0;
-            min-width: 0; /* Для flex-распределения */
+            min-width: 0; 
         }
         .tab-button:hover {
             color: var(--color-primary-blue);
@@ -1843,8 +1539,148 @@ export default function App() {
         .tab-icon {
             transition: transform 0.15s;
         }
-        
     `;
 
+    // --------------- ЭКРАН АВТОРИЗАЦИИ --------------- 
+    if (!auth) {
+        return (
+            <>
+                <style>{injectedStyles}</style>
+                <div className={`app-container login-form-wrapper`}>
+                    <div className="login-card">
+                        <div className="flex justify-center mb-4 h-10 mt-6">
+                            <div className="logo-text">HAULZ</div>
+                        </div>
+                        <div className="tagline">
+                            Доставка грузов в Калининград и обратно
+                        </div>
+                        <form onSubmit={handleSubmit} className="form">
+                            <div className="field">
+                                <input
+                                    className="login-input"
+                                    type="text"
+                                    placeholder="Логин (email)"
+                                    value={login}
+                                    onChange={(e) => setLogin(e.target.value)}
+                                    autoComplete="username"
+                                />
+                            </div>
+                            <div className="field">
+                                <div className="password-input-container">
+                                    <input
+                                        className="login-input"
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="Пароль"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        autoComplete="current-password"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="toggle-password-visibility"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                    >
+                                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                    </button>
+                                </div>
+                            </div>
+                            <label className="checkbox-row switch-wrapper">
+                                <span>
+                                    Согласие с{" "}
+                                    <a href="#" target="_blank" rel="noreferrer">
+                                        публичной офертой
+                                    </a>
+                                </span>
+                                <div
+                                    className={`switch-container ${agreeOffer ? 'checked' : ''}`}
+                                    onClick={() => setAgreeOffer(!agreeOffer)}
+                                >
+                                    <div className="switch-knob"></div>
+                                </div>
+                            </label>
+                            {/* FIX: Missing second checkbox, error block, and submit button */}
+                            <label className="checkbox-row switch-wrapper">
+                                <span>
+                                    Согласие на{" "}
+                                    <a href="#" target="_blank" rel="noreferrer">
+                                        обработку персональных данных
+                                    </a>
+                                </span>
+                                <div
+                                    className={`switch-container ${agreePersonal ? 'checked' : ''}`}
+                                    onClick={() => setAgreePersonal(!agreePersonal)}
+                                >
+                                    <div className="switch-knob"></div>
+                                </div>
+                            </label>
+
+                            {error && (
+                                <div className="login-error">
+                                    <AlertTriangle className="w-5 h-5 mr-2" />
+                                    {error}
+                                </div>
+                            )}
+
+                            <button 
+                                type="submit" 
+                                className="button-primary mt-6"
+                                disabled={!agreeOffer || !agreePersonal || loading}
+                            >
+                                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Войти"}
+                            </button>
+                            
+                        </form>
+                    </div>
+                </div>
+            </>
+        );
+    } // End of if (!auth)
+
+    // --------------- АВТОРИЗОВАННОЕ ПРИЛОЖЕНИЕ --------------- 
+    
+    const renderContent = useCallback(() => {
+        // Проверка на auth уже была, но для безопасности
+        if (!auth) return null; 
+
+        switch (activeTab) {
+            case "cargo":
+                return <CargoPage auth={auth} searchText={searchText} />;
+            case "profile":
+                return <ProfilePage auth={auth} onLogout={handleLogout} onThemeChange={setTheme} currentTheme={theme} />;
+            case "home":
+                return <div className="p-4 text-center title">Главная страница (скоро)</div>;
+            case "docs":
+                return <div className="p-4 text-center title">Документы (скоро)</div>;
+            case "support":
+                return <div className="p-4 text-center title">Поддержка (скоро)</div>;
+            default:
+                return null;
+        }
+    }, [activeTab, auth, searchText, handleLogout, theme]);
 
     return (
+        <div className={`app-container ${theme}-mode`}>
+            <style>{injectedStyles}</style>
+
+            {/* Header with Search Toggle */}
+            <AppHeader 
+                login={auth.login} 
+                onSearchToggle={() => setIsSearchExpanded(!isSearchExpanded)}
+                isSearchExpanded={isSearchExpanded}
+                searchText={searchText}
+                onSearchChange={handleSearch}
+            />
+            
+            {/* Main Content Area */}
+            <main className="app-main">
+                <div className="max-w-screen-lg w-full">
+                    {renderContent()}
+                </div>
+            </main>
+
+            {/* Bottom Navigation */}
+            <TabBar active={activeTab} onChange={setActiveTab} />
+
+        </div>
+    );
+} // End of export default function App()
