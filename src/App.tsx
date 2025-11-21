@@ -1,13 +1,11 @@
 
 import { useState } from "react";
-import { DebugDownloadPanel } from "./DebugDownloadPanel";
 
 export default function App() {
   const [auth, setAuth] = useState<{ login: string; password: string } | null>(null);
   const [item, setItem] = useState<{ Number: string }>({ Number: "000124472" });
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [debugData, setDebugData] = useState<any | null>(null);
 
   const PROXY_API_DOWNLOAD_URL = "/api/download";
 
@@ -23,14 +21,6 @@ export default function App() {
       metod: docType,
       number: item.Number,
     };
-
-    console.groupCollapsed("[DOWNLOAD DEBUG] → proxy /api/download");
-    console.log("Proxy URL:", PROXY_API_DOWNLOAD_URL);
-    console.log("Body → proxy:", {
-      ...payload,
-      password: "********",
-    });
-    console.groupEnd();
 
     setDownloading(docType);
     setDownloadError(null);
@@ -48,16 +38,6 @@ export default function App() {
 
       if (contentType?.includes("application/json")) {
         const json = await res.json();
-
-        setDebugData({
-          ...payload,
-          responseStatus: res.status,
-          responseType: contentType,
-          x1cUrl: res.headers.get("X-1C-URL"),
-          x1cAuth: res.headers.get("X-1C-Auth"),
-          x1cAuthorization: res.headers.get("X-1C-Authorization"),
-        });
-
         if (!json?.URL) throw new Error("Файл не найден в ответе");
 
         const fileRes = await fetch(json.URL);
@@ -89,9 +69,8 @@ export default function App() {
 
   return (
     <div style={{ padding: "20px" }}>
-      <h1>Пример загрузки документа</h1>
+      <h1>Загрузка документа</h1>
       <button onClick={() => handleDownload("ЭР")}>Скачать ЭР</button>
-      <DebugDownloadPanel debugData={debugData} />
     </div>
   );
 }
