@@ -128,7 +128,7 @@ const STATUS_MAP: Record<StatusFilter, string> = { "all": "Все", "accepted": 
 // ================== COMPONENTS ==================
 
 // --- HOME PAGE (STATISTICS) ---
-function HomePage({ cargoList, isLoading, error, auth, fetchList }: { cargoList: CargoItem[] | null, isLoading: boolean, error: string | null, auth: AuthData, fetchList: Function }) {
+function HomePage({ cargoList, isLoading, error }: { cargoList: CargoItem[] | null, isLoading: boolean, error: string | null }) { // Убраны лишние пропсы auth, fetchList
     const [filterLevel, setFilterLevel] = useState<1 | 2>(1);
     const [currentFilter, setCurrentFilter] = useState<string | null>(null);
 
@@ -244,8 +244,7 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
 
     return (
         <div className="w-full">
-            {/* Плитки статистики (оставлены здесь для удобства) */}
-            <HomePage cargoList={items} isLoading={loading} error={error} auth={auth} fetchList={loadCargo} />
+            {/* УДАЛЕНО: Плитки статистики, которые дублировали HomePage */}
 
             {/* Filters */}
             <div className="filters-container">
@@ -584,7 +583,7 @@ export default function App() {
             </header>
             <div className="app-main">
                 <div className="w-full max-w-4xl">
-                    {activeTab === "home" && <HomePage cargoList={null} isLoading={false} error={null} auth={auth} fetchList={() => {}} />}
+                    {activeTab === "home" && <HomePage cargoList={null} isLoading={false} error={null} />}
                     {activeTab === "cargo" && <CargoPage auth={auth} searchText={searchText} />}
                     {activeTab === "docs" && <StubPage title="Документы" />}
                     {activeTab === "support" && <StubPage title="Поддержка" />}
