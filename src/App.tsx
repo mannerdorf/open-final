@@ -401,7 +401,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
                 
                 <h4 style={{marginTop: '1rem', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 600}}>Документы</h4>
                 <div className="document-buttons">
-                    {['ЭР', 'АПП', 'СЧЕТ', 'УПД'].map(doc => (
+                    {['ЭР', 'АПП', 'Счет', 'Акт'].map(doc => (
                         <button key={doc} className="doc-button" onClick={() => handleDownload(doc)} disabled={downloading === doc}>
                             {downloading === doc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 mr-2" />} {doc}
                         </button>
