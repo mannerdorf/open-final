@@ -365,7 +365,6 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
             <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     {/* Заголовок без "Перевозка" */}
-                    <h3>Номер {item.Number}</h3> 
                     <button className="modal-close-button" onClick={onClose}><X size={20} /></button>
                 </div>
                 {downloadError && <p className="login-error mb-2">{downloadError}</p>}
