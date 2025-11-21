@@ -1,77 +1,65 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-// 🛑 УДАЛИТЕ: import fetch from "node-fetch"; 
-// 🛑 УДАЛИТЕ: import { Buffer } from "buffer"; 
+// api/download.ts
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import axios from 'axios';
 
-// URL внешнего API 1С для получения файла
-const EXTERNAL_API_BASE_URL = "https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetFile";
-
-// Сервисный Basic-auth: admin:juebfnye (Base64-кодированный)
-const SERVICE_AUTH = "Basic YWRtaW46anVlYmZueWU="; 
+const EXTERNAL_GETFILE_URL =
+  'https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetFile';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    if (req.method !== "POST") {
-        res.setHeader("Allow", "POST");
-        return res.status(405).json({ error: "Method not allowed" });
-    }
+  // Разрешаем только POST, иначе 405
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
-    let body: any = req.body;
-    if (typeof body === "string") {
-        try {
-            body = JSON.parse(body);
-        } catch {
-            return res.status(400).json({ error: "Invalid JSON body" });
-        }
-    }
+  const { login, password, metod, number } = req.body || {};
 
-    const {
-        login,
-        password,
-        metod, 
-        Number, 
-    } = body || {};
+  if (!login || !password || !metod || !number) {
+    return res.status(400).json({
+      error: 'Нужны поля: login, password, metod, number',
+    });
+  }
 
-    if (!login || !password || !metod || !Number) {
-        return res.status(400).json({ error: "login, password, metod, and Number are required" });
-    }
+  try {
+    // формируем URL типа:
+    // https://tdn.postb.ru/.../GetFile?metod=ЭР&Number=000107984
+    const url =
+      `${EXTERNAL_GETFILE_URL}` +
+      `?metod=${encodeURIComponent(metod)}` +
+      `&Number=${encodeURIComponent(number)}`;
 
-    // Используем глобальный конструктор URL
-    const url = new URL(EXTERNAL_API_BASE_URL);
-    url.searchParams.set("metod", metod); 
-    url.searchParams.set("Number", Number);
+    const externalResponse = await axios.get(url, {
+      responseType: 'arraybuffer',
+      headers: {
+        // 1) админский токен (Base64) — строго как в curl
+        Authorization: 'Basic YWRtaW46anVlYmZueWU=',
+        // 2) клиентский токен — НЕ кодируем, просто "Basic login:password"
+        //    соответствует: Auth: Basic order@lal-auto.com:ZakaZ656565
+        Auth: `Basic ${login}:${password}`,
+      },
+    });
 
-    try {
-        // Используем глобальный fetch
-        const upstream = await fetch(url.toString(), {
-            method: "GET", 
-            headers: {
-                'Auth': `Basic ${login}:${password}`, 
-                'Authorization': SERVICE_AUTH,
-            },
-        });
+    // Пробрасываем файл обратно на фронт
+    const contentType =
+      externalResponse.headers['content-type'] || 'application/pdf';
+    const filename = `${metod}_${number}.pdf`;
 
-        if (!upstream.ok) {
-            const errorText = await upstream.text();
-            return res.status(upstream.status).send(
-                errorText || {
-                    error: `Upstream error: ${upstream.status}`,
-                }
-            );
-        }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`
+    );
 
-        // 5. Передача заголовков файла и данных
-        const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
-        const contentDisposition = upstream.headers.get('content-disposition') || `attachment; filename="${Number}_${metod}.pdf"`;
-        
-        res.status(200)
-           .setHeader('Content-Type', contentType)
-           .setHeader('Content-Disposition', contentDisposition);
+    return res.status(200).send(Buffer.from(externalResponse.data));
+  } catch (err: any) {
+    const status = err.response?.status || 500;
+    console.error('GetFile error:', status, err.response?.data || err.message);
 
-        // Получаем arrayBuffer и используем глобальный Buffer
-        const buffer = await upstream.arrayBuffer();
-        res.send(Buffer.from(buffer)); // ⬅️ Используем глобальный Buffer
-        
-    } catch (error: any) {
-        console.error('Proxy error:', error?.message || error);
-        res.status(500).json({ error: 'Proxy fetch failed' });
-    }
+    return res.status(status).json({
+      error: 'Ошибка при скачивании файла',
+      status,
+      // для дебага можно временно отдавать тело ошибки как текст
+      upstream: err.response?.data?.toString?.(),
+    });
+  }
 }
