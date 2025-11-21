@@ -1,92 +1,65 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+// api/download.ts
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import axios from 'axios';
 
-const BASE_API_URL = "https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetFile";
-// сервисный Basic-auth: admin:juebfnye
-const SERVICE_AUTH = "Basic YWRtaW46anVlYmZueWU=";
+const EXTERNAL_GETFILE_URL =
+  'https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetFile';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "Method not allowed" });
+  // Разрешаем только POST, иначе 405
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Читаем JSON из body
-  let body: any = req.body;
-  if (typeof body === "string") {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      return res.status(400).json({ error: "Invalid JSON body" });
-    }
-  }
-
-  const {
-    login,
-    password,
-    metod, // ЭР, АПП, и т.д.
-    number, // Номер перевозки
-  } = body || {};
+  const { login, password, metod, number } = req.body || {};
 
   if (!login || !password || !metod || !number) {
-    return res.status(400).json({ error: "login, password, metod, and number are required" });
+    return res.status(400).json({
+      error: 'Нужны поля: login, password, metod, number',
+    });
   }
 
-  // URL с параметрами (будут отправлены в теле POST-запроса к 1С)
-  // В 1С API GetFile ожидает параметры в теле POST-запроса, но для совместимости
-  // и простоты проксирования будем использовать один URL.
-  const url = new URL(BASE_API_URL);
-  
   try {
-    // Двойная авторизация:
-    // Auth: Basic [user_creds] - для авторизации пользователя в 1С
-    // Authorization: Basic [service_creds] - для авторизации Vercel-прокси в 1С (сервисная авторизация)
-    const upstream = await fetch(url.toString(), {
-      method: "POST",
+    // формируем URL типа:
+    // https://tdn.postb.ru/.../GetFile?metod=ЭР&Number=000107984
+    const url =
+      `${EXTERNAL_GETFILE_URL}` +
+      `?metod=${encodeURIComponent(metod)}` +
+      `&Number=${encodeURIComponent(number)}`;
+
+    const externalResponse = await axios.get(url, {
+      responseType: 'arraybuffer',
       headers: {
-        "Content-Type": "application/json",
-        // Авторизация пользователя для 1С
-        "Auth": `Basic ${btoa(`${login}:${password}`)}`, 
-        // Сервисная авторизация для доступа к API 1С
-        "Authorization": SERVICE_AUTH,
+        // 1) админский токен (Base64) — строго как в curl
+        Authorization: 'Basic YWRtaW46anVlYmZueWU=',
+        // 2) клиентский токен — НЕ кодируем, просто "Basic login:password"
+        //    соответствует: Auth: Basic order@lal-auto.com:ZakaZ656565
+        Auth: `Basic ${login}:${password}`,
       },
-      // Параметры для GetFile (номер и тип документа)
-      body: JSON.stringify({
-        Number: number,
-        Metod: metod,
-      }),
     });
 
-    // 1. Обработка ошибки
-    if (!upstream.ok) {
-      const text = await upstream.text();
-      let errorBody = {};
-      try {
-        errorBody = JSON.parse(text);
-      } catch {
-        errorBody = { error: `Upstream error: ${upstream.status}`, details: text.substring(0, 100) };
-      }
-      return res.status(upstream.status).json(errorBody);
-    }
+    // Пробрасываем файл обратно на фронт
+    const contentType =
+      externalResponse.headers['content-type'] || 'application/pdf';
+    const filename = `${metod}_${number}.pdf`;
 
-    // 2. Успешный ответ: пробрасываем заголовки и бинарные данные
-    
-    // Устанавливаем заголовки для скачивания файла (предполагаем PDF)
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${number}-${metod}.pdf"`);
-    
-    // Пробрасываем данные из upstream ответа в VercelResponse
-    if (upstream.body) {
-        // @ts-ignore
-        await upstream.body.pipe(res);
-        return;
-    } else {
-        return res.status(500).json({ error: "Upstream response body is empty" });
-    }
-    
-  } catch (e: any) {
-    console.error("Proxy error:", e);
-    return res
-      .status(500)
-      .json({ error: "Proxy error", details: e?.message || String(e) });
+    res.setHeader('Content-Type', contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`
+    );
+
+    return res.status(200).send(Buffer.from(externalResponse.data));
+  } catch (err: any) {
+    const status = err.response?.status || 500;
+    console.error('GetFile error:', status, err.response?.data || err.message);
+
+    return res.status(status).json({
+      error: 'Ошибка при скачивании файла',
+      status,
+      // для дебага можно временно отдавать тело ошибки как текст
+      upstream: err.response?.data?.toString?.(),
+    });
   }
 }
