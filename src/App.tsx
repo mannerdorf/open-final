@@ -56,6 +56,18 @@ const getSixMonthsAgoDate = () => {
     return d.toISOString().split('T')[0];
 };
 
+// **********************************************
+// ИЗМЕНЕНИЕ 1: Добавляем функцию для получения даты начала текущего года
+// для более широкого диапазона "Все" по умолчанию.
+const getStartOfYearDate = () => {
+    const d = new Date();
+    d.setMonth(0); // January
+    d.setDate(1); // 1st
+    return d.toISOString().split('T')[0];
+};
+// **********************************************
+
+
 const STATUS_MAP: Record<string, { label: string, color: 'success' | 'pending' | 'danger' }> = {
     'delivered': { label: 'Доставлен', color: 'success' },
     'delivering': { label: 'Доставка', color: 'pending' },
@@ -73,8 +85,10 @@ const getDateRange = (filter: DateFilter, customDateFrom?: string, customDateTo?
     let dateFrom = getTodayDate();
 
     switch (filter) {
-        case 'all': // 6 месяцев по умолчанию
-            dateFrom = getSixMonthsAgoDate();
+        case 'all': // С начала года по умолчанию (изменение)
+            // **********************************************
+            dateFrom = getStartOfYearDate(); 
+            // **********************************************
             break;
         case 'today':
             dateFrom = getTodayDate();
@@ -88,11 +102,15 @@ const getDateRange = (filter: DateFilter, customDateFrom?: string, customDateTo?
             dateFrom = today.toISOString().split('T')[0];
             break;
         case 'custom':
-            dateFrom = customDateFrom || getSixMonthsAgoDate();
+            // **********************************************
+            dateFrom = customDateFrom || getStartOfYearDate();
+            // **********************************************
             dateTo = customDateTo || getTodayDate();
             break;
         default:
-            dateFrom = getSixMonthsAgoDate();
+            // **********************************************
+            dateFrom = getStartOfYearDate();
+            // **********************************************
             break;
     }
     return { dateFrom, dateTo };
@@ -418,8 +436,12 @@ type DateFilterDropdownProps = {
 
 function DateFilterDropdown({ selected, onSelect, customDateFrom, setCustomDateFrom, customDateTo, setCustomDateTo }: DateFilterDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
+    
+    // **********************************************
+    // ИЗМЕНЕНИЕ 2: Обновляем метку для 'all' на 'С начала года'
     const options: { value: DateFilter, label: string }[] = [
-        { value: 'all', label: 'За 6 месяцев' },
+        { value: 'all', label: 'С начала года' },
+    // **********************************************
         { value: 'today', label: 'Сегодня' },
         { value: 'week', label: 'За неделю' },
         { value: 'month', label: 'За месяц' },
@@ -510,13 +532,19 @@ function CargoPage({ auth, searchText }: CargoPageProps) {
 
     const [dateFilter, setDateFilter] = useState<DateFilter>('all');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    const [customDateFrom, setCustomDateFrom] = useState(getSixMonthsAgoDate());
+    
+    // **********************************************
+    // ИЗМЕНЕНИЕ 3: Устанавливаем начальную дату для custom-фильтра на начало года
+    const [customDateFrom, setCustomDateFrom] = useState(getStartOfYearDate());
+    // **********************************************
     const [customDateTo, setCustomDateTo] = useState(getTodayDate());
 
     const fetchCargo = useCallback(async (dateFilterType: DateFilter, dateFrom: string, dateTo: string) => {
         setLoading(true);
         setError(null);
         try {
+            console.log(`[API Call] Fetching cargo from ${dateFrom} to ${dateTo}`); // Добавление лога
+            
             const res = await fetch(PROXY_API_BASE_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -529,7 +557,7 @@ function CargoPage({ auth, searchText }: CargoPageProps) {
             });
 
             if (!res.ok) {
-                const message = `Ошибка загрузки грузов: ${res.status}.`;
+                const message = `Ошибка загрузки грузов: ${res.status}. ${res.statusText || 'Проверьте настройки прокси.'}`;
                 setError(message);
                 setCargoList([]);
                 return;
@@ -552,8 +580,10 @@ function CargoPage({ auth, searchText }: CargoPageProps) {
             }));
 
             setCargoList(cleanData);
+            console.log(`[API Success] Loaded ${cleanData.length} items.`); // Добавление лога успеха
+
         } catch (err: any) {
-            setError(err?.message || "Ошибка сети при загрузке грузов.");
+            setError(err?.message || "Ошибка сети или некорректный ответ от сервера.");
             setCargoList([]);
         } finally {
             setLoading(false);
@@ -755,9 +785,12 @@ export default function App() {
         try {
             setLoading(true);
 
-            const { dateFrom, dateTo } = getDateRange("all"); // Начальный запрос на 6 месяцев
+            // **********************************************
+            // Используем новую, более широкую дату для проверки авторизации
+            const { dateFrom, dateTo } = getDateRange("all"); 
+            // **********************************************
             
-            // Отправляем POST-запрос с логином/паролем в теле (для проверки авторизации)
+            // Отправляем POST-запрос с логином/паролем в теле (для проверки авторизации и получения данных)
             const res = await fetch(PROXY_API_BASE_URL, {
                 method: "POST", 
                 headers: { "Content-Type": "application/json" },
