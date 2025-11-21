@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useState, useMemo } from "react";
 import WebApp from '@twa-dev/sdk';
 import { 
     LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff, AlertTriangle, Package, Calendar, Tag, Layers, Weight, Filter, Search, ChevronDown, User as UserIcon, Scale, RussianRuble, List, Download, FileText as FileTextIcon, Send, 
-    LayoutGrid, Maximize, TrendingUp, CornerUpLeft, ClipboardCheck, CreditCard, Minus, Lock
+    LayoutGrid, Maximize, TrendingUp, CornerUpLeft, ClipboardCheck, CreditCard, Minus, Lock, Clock
 } from 'lucide-react';
 import React from "react";
 import "./styles.css";
@@ -16,6 +16,7 @@ const PROXY_API_DOWNLOAD_URL = '/api/download';
 type ApiError = { error?: string; [key: string]: unknown; };
 type AuthData = { login: string; password: string; };
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
+type StatusFilter = "Все" | "В пути" | "Готов к выдаче" | "Доставлен" | "Долг" | "Принят";
 
 type CargoItem = {
     Number?: string; DatePrih?: string; DateVr?: string; State?: string; Mest?: number | string; 
@@ -24,7 +25,7 @@ type CargoItem = {
     [key: string]: any; 
 };
 
-// Заглушки статистики
+// Заглушки статистики (пока не считаем на фронте)
 const STATS_LEVEL_1 = [
     { id: 'in_transit', label: 'В пути', value: 12, color: 'text-blue-400', icon: Truck },
     { id: 'ready', label: 'Готов к выдаче', value: 4, color: 'text-green-400', icon: Package },
@@ -35,6 +36,7 @@ const STATS_LEVEL_2 = [
     { label: 'Объем в пути', value: '12.5 м³', icon: Layers },
     { label: 'Ожидаемая дата', value: '24.06.2024', icon: Calendar },
 ];
+
 
 // --- MAIN APP COMPONENT ---
 export default function App() {
@@ -86,6 +88,8 @@ export default function App() {
     const handleLogin = (data: AuthData) => {
         setAuth(data);
         localStorage.setItem('app_auth', JSON.stringify(data));
+        // Сброс ошибки, чтобы не показывать ее после успешного ввода
+        setError(null); 
     };
 
     const handleLogout = () => {
@@ -147,7 +151,8 @@ export default function App() {
 
     // Если не авторизован — показываем форму входа
     if (!auth) {
-        return <LoginForm onLogin={handleLogin} isLoading={false} error={null} />;
+        // В реальном приложении нужно передавать isLoading и error из процесса АПИ логина
+        return <LoginForm onLogin={handleLogin} isLoading={false} error={error} />; 
     }
 
     return (
@@ -182,7 +187,7 @@ export default function App() {
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
                         <input 
                             type="search" 
-                            placeholder="Поиск по номеру..." 
+                            placeholder="Поиск по номеру, статусу..." 
                             className="w-full bg-gray-700 text-white pl-9 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             value={searchText} 
                             onChange={(e) => { setSearchText(e.target.value); handleSearch(e.target.value); }} 
@@ -218,6 +223,10 @@ export default function App() {
     );
 }
 
+// ------------------------------------------------------------------
+// --- COMPONENTS ---
+// ------------------------------------------------------------------
+
 // --- LOGIN FORM COMPONENT (NEW STYLE) ---
 function LoginForm({ onLogin, isLoading, error }: { onLogin: (data: AuthData) => void; isLoading: boolean; error: string | null }) {
     const [login, setLogin] = useState("");
@@ -247,7 +256,7 @@ function LoginForm({ onLogin, isLoading, error }: { onLogin: (data: AuthData) =>
                 {error && (
                     <div className="mx-6 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3 animate-pulse">
                         <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                        <p className="text-sm text-red-400 leading-tight">{error}</p>
+                        <p className="text-sm text-red-400 leading-tight">Ошибка: {error}</p>
                     </div>
                 )}
 
@@ -395,74 +404,178 @@ function HomePage({ cargoList, isLoading, error }: { cargoList: CargoItem[] | nu
     );
 }
 
-// --- CARGO PAGE COMPONENT ---
+// Вспомогательный компонент для Details Grid
+function DetailItem({ icon: Icon, label, value }: { icon: any, label: string, value: any }) {
+    return (
+        <div className="flex items-center space-x-2">
+            <Icon className="w-4 h-4 opacity-50 text-blue-400 flex-shrink-0" />
+            <div>
+                <span className="text-xs text-gray-500 block leading-none">{label}</span>
+                <span className="text-sm font-medium text-white">{value || '-'}</span>
+            </div>
+        </div>
+    );
+}
+
+// --- CARGO PAGE COMPONENT (НОВЫЙ СТИЛЬ С ФИЛЬТРАМИ) ---
 function CargoPage({ auth, searchText, preloadedData }: { auth: AuthData, searchText: string, preloadedData: CargoItem[] | null }) {
+    const [filterStatus, setFilterStatus] = useState<StatusFilter>("Все");
+
+    const statusMap: { [key: string]: { label: string; color: string; icon: any } } = useMemo(() => ({
+        "В пути": { label: "В пути", color: "bg-blue-600/20 text-blue-400 border-blue-700", icon: Truck },
+        "Готов к выдаче": { label: "Готов к выдаче", color: "bg-green-600/20 text-green-400 border-green-700", icon: Check },
+        "Доставлен": { label: "Доставлен", color: "bg-gray-600/20 text-gray-400 border-gray-700", icon: ClipboardCheck },
+        "Долг": { label: "Долг", color: "bg-red-600/20 text-red-400 border-red-700", icon: RussianRuble },
+        "Принят": { label: "Принят", color: "bg-yellow-600/20 text-yellow-400 border-yellow-700", icon: Package },
+        "Отправлен": { label: "Отправлен", color: "bg-blue-600/20 text-blue-400 border-blue-700", icon: Send },
+        // Добавь другие статусы 1С здесь
+    }), []);
+
     const dataToDisplay = useMemo(() => {
         if (!preloadedData) return [];
-        if (!searchText) return preloadedData;
-        const lower = searchText.toLowerCase();
-        return preloadedData.filter(item => 
-            (item.Number && item.Number.toLowerCase().includes(lower)) ||
-            (item.State && item.State.toLowerCase().includes(lower))
-        );
-    }, [preloadedData, searchText]);
+        let filteredData = preloadedData;
+        
+        // 1. Фильтрация по статусу
+        if (filterStatus !== "Все") {
+            filteredData = filteredData.filter(item => {
+                // Если выбран "Долг", фильтруем по полю Debt
+                if (filterStatus === "Долг") {
+                    return parseFloat(String(item.Debt)) > 0;
+                }
+                // Иначе фильтруем по статусу
+                return item.State === filterStatus;
+            });
+        }
+
+        // 2. Фильтрация по поиску
+        if (searchText) {
+            const lower = searchText.toLowerCase();
+            filteredData = filteredData.filter(item => 
+                (item.Number && item.Number.toLowerCase().includes(lower)) ||
+                (item.State && (statusMap[item.State]?.label.toLowerCase().includes(lower) || item.State.toLowerCase().includes(lower))) ||
+                (item.Sender && item.Sender.toLowerCase().includes(lower)) ||
+                (item.Receiver && item.Receiver.toLowerCase().includes(lower))
+            );
+        }
+
+        return filteredData;
+    }, [preloadedData, searchText, filterStatus, statusMap]);
+    
+    // Временный хэндлер для открытия деталей
+    const handleOpenDetails = (cargo: CargoItem) => {
+        WebApp.showAlert(`Открываем детали для груза № ${cargo.Number}`);
+        // TODO: Здесь будет навигация на страницу/модал деталей
+    };
+
+    // Формируем уникальный список статусов для фильтрации
+    const rawStatuses = new Set(preloadedData?.map(item => item.State).filter(s => s) || []);
+    // Добавляем "Долг" если он есть в данных, и убеждаемся, что статус известен в statusMap
+    if (preloadedData?.some(item => parseFloat(String(item.Debt)) > 0)) {
+        rawStatuses.add("Долг");
+    }
+    const uniqueStatuses = ["Все", ...Array.from(rawStatuses).filter(s => s in statusMap)] as StatusFilter[];
+
 
     return (
         <div className="fade-in pb-4">
+             {/* 1. Заголовок и количество */}
              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-white">Мои грузы</h2>
-                <span className="text-xs bg-gray-700 px-2 py-1 rounded-full text-gray-300">{dataToDisplay.length}</span>
+                <h2 className="text-2xl font-bold text-white">Мои грузы ({dataToDisplay.length})</h2>
+                <Filter className="w-5 h-5 text-gray-400" />
             </div>
-            
-            <div className="space-y-3">
+
+            {/* 2. Фильтр-чипсы (Status Tabs) */}
+            <div className="flex space-x-2 overflow-x-auto whitespace-nowrap mb-6 scrollbar-hide">
+                {uniqueStatuses.map((status) => {
+                    const isActive = status === filterStatus;
+                    return (
+                        <button
+                            key={status}
+                            onClick={() => setFilterStatus(status as StatusFilter)}
+                            className={`px-4 py-2 text-sm rounded-full font-medium transition-all duration-200 flex-shrink-0 ${
+                                isActive 
+                                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" 
+                                    : "bg-gray-700 text-gray-400 hover:bg-gray-600"
+                            }`}
+                        >
+                            {status}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* 3. Список грузов (Cards) */}
+            <div className="space-y-4">
                 {dataToDisplay.length === 0 ? (
-                    <div className="text-center py-10 text-gray-500">
-                        Нет данных для отображения
+                    <div className="text-center py-10 text-gray-500 bg-gray-800 rounded-xl border border-gray-700">
+                        <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                        <p>Поиск не дал результатов или список пуст</p>
                     </div>
                 ) : (
-                    dataToDisplay.map((cargo, idx) => (
-                        <div key={idx} className="bg-gray-800 p-4 rounded-xl border border-gray-700 hover:border-gray-600 transition-colors">
-                            <div className="flex justify-between items-start mb-3">
-                                <div>
-                                    <span className="px-2 py-1 bg-blue-900/30 text-blue-400 text-xs rounded-md font-medium border border-blue-900/50">
-                                        {cargo.State || "В работе"}
-                                    </span>
-                                    <h4 className="mt-2 text-lg font-bold text-white">{cargo.Number}</h4>
-                                </div>
-                                <div className="text-right">
-                                    <span className="text-lg font-bold text-white block">{cargo.Cost} ₽</span>
-                                    {cargo.Debt && parseFloat(String(cargo.Debt)) > 0 && (
-                                        <span className="text-xs text-red-400 flex items-center justify-end gap-1">
-                                            <AlertTriangle className="w-3 h-3" /> Долг: {cargo.Debt}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-2 text-sm text-gray-400 mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Calendar className="w-4 h-4 opacity-50" />
-                                    <span>{cargo.DatePrih}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Weight className="w-4 h-4 opacity-50" />
-                                    <span>{cargo.W} кг / {cargo.Volume} м³</span>
-                                </div>
-                            </div>
+                    dataToDisplay.map((cargo, idx) => {
+                        const statusKey = cargo.State as keyof typeof statusMap;
+                        const statusInfo = statusMap[statusKey] || { label: "В работе", color: "bg-gray-500/20 text-gray-300 border-gray-600", icon: Clock };
+                        const hasDebt = parseFloat(String(cargo.Debt)) > 0;
+                        
+                        // Если статус фильтра Долг, подсвечиваем его красным, даже если статус другой
+                        const cardStatusInfo = hasDebt && filterStatus === "Долг" 
+                            ? statusMap["Долг"] 
+                            : statusInfo;
 
-                            <div className="pt-3 border-t border-gray-700 flex justify-between items-center">
-                                <span className="text-xs text-gray-500">{cargo.Sender} &rarr; {cargo.Receiver}</span>
-                                <button className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition-colors">
-                                    <FileTextIcon className="w-4 h-4" />
-                                </button>
+                        return (
+                            <div 
+                                key={idx} 
+                                onClick={() => handleOpenDetails(cargo)}
+                                className="bg-gray-800 p-4 rounded-xl border border-gray-700 hover:border-gray-600 transition-all cursor-pointer shadow-lg active:scale-[0.99]"
+                            >
+                                {/* Top Line: Number & Status */}
+                                <div className="flex justify-between items-start mb-3">
+                                    <h4 className="text-xl font-extrabold text-white leading-tight">№ {cargo.Number}</h4>
+                                    <span className={`px-3 py-1 text-xs rounded-full font-semibold border ${cardStatusInfo.color}`}>
+                                        {cardStatusInfo.label}
+                                    </span>
+                                </div>
+                                
+                                {/* Debt Indicator (High Priority) */}
+                                {hasDebt && filterStatus !== "Долг" && ( // Показываем только если не на фильтре Долг (чтобы не дублировать информацию)
+                                    <div className="flex items-center gap-2 p-2 mb-3 bg-red-900/40 border border-red-700/50 rounded-lg">
+                                        <RussianRuble className="w-4 h-4 text-red-400 flex-shrink-0" />
+                                        <span className="text-sm font-medium text-red-300">
+                                            Долг: {cargo.Debt} ₽ (Оплатить)
+                                        </span>
+                                    </div>
+                                )}
+                                
+                                {/* Main Details Grid */}
+                                <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm text-gray-300">
+                                    <DetailItem icon={Calendar} label="Дата прихода" value={cargo.DatePrih} />
+                                    <DetailItem icon={Truck} label="Дата вручения" value={cargo.DateVr} />
+                                    <DetailItem icon={Weight} label="Вес/Объем" value={`${cargo.W} кг / ${cargo.Volume} м³`} />
+                                    <DetailItem icon={Package} label="Мест" value={cargo.Mest} />
+                                </div>
+
+                                {/* Sender/Receiver Footer */}
+                                <div className="pt-3 mt-3 border-t border-gray-700 flex justify-between items-center">
+                                    <span className="text-xs text-gray-500 overflow-hidden text-ellipsis whitespace-nowrap max-w-[70%]">
+                                        {cargo.Sender} &rarr; {cargo.Receiver}
+                                    </span>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); WebApp.showAlert(`Скачивание документов для ${cargo.Number}`); }}
+                                        className="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors flex-shrink-0"
+                                        title="Скачать документы"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>
     );
 }
+
 
 // --- STUB PAGE COMPONENT ---
 function StubPage({ title }: { title: string }) {
@@ -481,7 +594,7 @@ function StubPage({ title }: { title: string }) {
 function TabBar({ active, onChange }: { active: Tab, onChange: (t: Tab) => void }) {
     const tabs: { id: Tab; label: string; icon: any }[] = [
         { id: "home", label: "Главная", icon: Home },
-        { id: "cargo", label: "Грузы", icon: Package }, // Package looks better for cargo
+        { id: "cargo", label: "Грузы", icon: Package }, 
         { id: "docs", label: "Доки", icon: FileText },
         { id: "support", label: "Чат", icon: MessageCircle },
         { id: "profile", label: "Профиль", icon: User },
