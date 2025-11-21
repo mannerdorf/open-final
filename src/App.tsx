@@ -357,13 +357,6 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         } catch (e: any) { setDownloadError(e.message); } finally { setDownloading(null); }
     };
 
-    const handleChat = () => { window.open('https://t.me/haulz_support', '_blank'); };
-    const handleShare = () => { 
-        const text = `Перевозка №${item.Number}: ${item.State}, ${formatCurrency(item.Sum)}`;
-        if ((window as any).Telegram?.WebApp?.shareUrl) { (window as any).Telegram.WebApp.shareUrl(window.location.origin, { text }); }
-        else { navigator.clipboard.writeText(text); alert('Скопировано: ' + text); }
-    };
-
     // Список явно отображаемых полей (из API примера)
     const EXCLUDED_KEYS = ['Number', 'DatePrih', 'DateVr', 'State', 'Mest', 'PW', 'W', 'Value', 'Sum', 'StateBill', 'Sender'];
 
@@ -371,14 +364,11 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
-                    <h3>Перевозка №{item.Number}</h3>
+                    {/* Заголовок без "Перевозка" */}
+                    <h3>Номер {item.Number}</h3> 
                     <button className="modal-close-button" onClick={onClose}><X size={20} /></button>
                 </div>
                 {downloadError && <p className="login-error mb-2">{downloadError}</p>}
-                <div className="document-buttons mb-4">
-                    <button className="doc-button" onClick={handleChat}><MessageCircle className="w-4 h-4 mr-2"/>Чат</button>
-                    <button className="doc-button" onClick={handleShare}><Send className="w-4 h-4 mr-2"/>Поделиться</button>
-                </div>
                 
                 {/* Явно отображаемые поля (из API примера) */}
                 <div className="details-grid-modal">
@@ -395,8 +385,8 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
                     <DetailItem label="Статус Счета" value={item.StateBill || '-'} highlighted /> {/* Используем StateBill */}
                 </div>
                 
-                {/* ДОПОЛНИТЕЛЬНЫЕ поля из API */}
-                <h4 style={{marginTop: '1rem', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 600}}>Прочие данные из API</h4>
+                {/* ДОПОЛНИТЕЛЬНЫЕ поля из API - УДАЛЕН ЗАГОЛОВОК "Прочие данные из API" */}
+                
                 <div className="details-grid-modal">
                     {Object.entries(item)
                         .filter(([key]) => !EXCLUDED_KEYS.includes(key))
