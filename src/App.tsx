@@ -344,8 +344,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         
         return `${val}${unit ? ' ' + unit : ''}`;
     };
-    
-   const handleDownload = async (docType: string) => {
+const handleDownload = async (docType: string) => {
     if (!item.Number) {
         alert("Нет номера перевозки");
         return;
@@ -363,7 +362,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
     console.log("Proxy URL:", PROXY_API_DOWNLOAD_URL);
     console.log("Body → proxy:", {
         ...payload,
-        password: "********", // пароль скрываем
+        password: "********",
     });
     console.groupEnd();
 
@@ -383,10 +382,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         console.log("Content-Type:", res.headers.get("Content-Type"));
         console.log("X-1C-URL:", res.headers.get("X-1C-URL"));
         console.log("X-1C-Auth:", res.headers.get("X-1C-Auth"));
-        console.log(
-            "X-1C-Authorization:",
-            res.headers.get("X-1C-Authorization"),
-        );
+        console.log("X-1C-Authorization:", res.headers.get("X-1C-Authorization"));
         console.groupEnd();
 
         if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
@@ -406,6 +402,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         setDownloading(null);
     }
 };
+
 
 const DetailItem = ({ label, value, icon, statusClass, highlighted }: any) => (
     <div className={`details-item-modal ${highlighted ? 'highlighted-detail' : ''}`}>
