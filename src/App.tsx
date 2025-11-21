@@ -15,7 +15,7 @@ const PROXY_API_DOWNLOAD_URL = '/api/download';
 type ApiError = { error?: string; [key: string]: unknown; };
 type AuthData = { login: string; password: string; };
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
-type DateFilter = "все" | "сегодня" | "неделя" | "месяц" | "период";
+type DateFilter = "all" | "today" | "week" | "month" | "custom";
 type StatusFilter = "all" | "accepted" | "in_transit" | "ready" | "delivering" | "delivered";
 
 type CargoItem = {
@@ -88,7 +88,9 @@ const getDateRange = (filter: DateFilter) => {
 const formatDate = (dateString: string | undefined): string => {
     if (!dateString) return '-';
     try {
-        const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00');
+        // Убеждаемся, что строка - это только дата (без времени) для корректного парсинга
+        const cleanDateString = dateString.split('T')[0]; 
+        const date = new Date(cleanDateString);
         if (!isNaN(date.getTime())) return date.toLocaleDateString('ru-RU');
     } catch { }
     return dateString;
@@ -191,6 +193,16 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
 
     const apiDateRange = useMemo(() => dateFilter === "custom" ? { dateFrom: customDateFrom, dateTo: customDateTo } : getDateRange(dateFilter), [dateFilter, customDateFrom, customDateTo]);
 
+    const findDeliveryDate = (item: any): string | undefined => {
+        // Поиск по известным ключам для даты вручения/доставки
+        return item.DateVruch 
+            || item.DateDelivery 
+            || item.DeliveryDate 
+            || item.VruchenieDate 
+            || item.DateFactVruch // Если API использует русские названия
+            || undefined;
+    }
+
     const loadCargo = useCallback(async (dateFrom: string, dateTo: string) => {
         setLoading(true); setError(null);
         try {
@@ -204,7 +216,7 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
                 ...item,
                 Number: item.Number, 
                 DatePrih: item.DatePrih, 
-                DateVruch: item.DateVruch, // Дата вручения
+                DateVruch: findDeliveryDate(item), // ИСПОЛЬЗУЕМ ФУНКЦИЮ ПОИСКА
                 State: item.State, 
                 Mest: item.Mest, 
                 PV: item.PV || item.PaymentWeight || item.PW, 
@@ -355,7 +367,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
 
     const handleChat = () => { window.open('https://t.me/haulz_support', '_blank'); };
     const handleShare = () => { 
-        const text = `${item.Number}: ${item.State}, ${formatCurrency(item.Sum)}`;
+        const text = `Перевозка №${item.Number}: ${item.State}, ${formatCurrency(item.Sum)}`;
         if ((window as any).Telegram?.WebApp?.shareUrl) { (window as any).Telegram.WebApp.shareUrl(window.location.origin, { text }); }
         else { navigator.clipboard.writeText(text); alert('Скопировано: ' + text); }
     };
@@ -367,7 +379,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
-                    <h3>{item.Number}</h3>
+                    <h3>Перевозка №{item.Number}</h3>
                     <button className="modal-close-button" onClick={onClose}><X size={20} /></button>
                 </div>
                 {downloadError && <p className="login-error mb-2">{downloadError}</p>}
