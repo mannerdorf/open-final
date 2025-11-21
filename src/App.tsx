@@ -15,7 +15,7 @@ const PROXY_API_DOWNLOAD_URL = '/api/download';
 type ApiError = { error?: string; [key: string]: unknown; };
 type AuthData = { login: string; password: string; };
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
-type DateFilter = "all" | "today" | "week" | "month" | "custom";
+type DateFilter = "все" | "сегодня" | "неделя" | "месяц" | "период";
 type StatusFilter = "all" | "accepted" | "in_transit" | "ready" | "delivering" | "delivered";
 
 // --- ИСПОЛЬЗУЕМ ТОЛЬКО ПЕРЕМЕННЫЕ ИЗ API ---
