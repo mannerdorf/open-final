@@ -1151,116 +1151,161 @@ function FilterDialog({ isOpen, onClose, dateFrom, dateTo, onApply }: FilterDial
 }
 
 
-// ----------------- КОМПОНЕНТ ДЕТАЛИЗАЦИИ ГРУЗА (CargoDetailsModal) -----------------
+// ----------------- КОМПОНЕНТ ДЕТАЛИЗАЦИИ ГРУЗА -----------------
 
 type CargoDetailsModalProps = {
-    item: CargoItem;
-    isOpen: boolean;
-    onClose: () => void;
+  item: any; // Используем any для гибкости, или CargoItem если он определен глобально
+  isOpen: boolean;
+  onClose: () => void;
+  auth: AuthData;
 };
 
-function CargoDetailsModal({ item, isOpen, onClose }: CargoDetailsModalProps) {
-    if (!isOpen) return null;
+function CargoDetailsModal({ item, isOpen, onClose, auth }: CargoDetailsModalProps) {
+  const [downloading, setDownloading] = useState<string | null>(null);
 
-    // Вспомогательная функция для отображения значения
-    const renderValue = (value: number | string | undefined, unit: string = '') => {
-        if (value === undefined || value === null || value === "") return '-';
-        return `${value} ${unit}`;
-    };
+  if (!isOpen || !item) return null;
 
-    // Заглушка для скачивания
-    const handleDownload = (docType: string) => {
-        alert(`Функция скачивания документа "${docType}" пока не реализована. Номер перевозки: ${item.Number || '-'}`);
-        // Здесь будет логика запроса к API для получения ссылки на документ
-    };
+  // Хелпер для форматирования значений
+  const renderValue = (val: any, unit = "") => {
+    if (val === undefined || val === null || val === "") return "-";
+    return `${val}${unit ? " " + unit : ""}`;
+  };
 
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h3 className="flex items-center">
-                        <Truck className="w-5 h-5 mr-2 text-theme-primary" />
-                        Перевозка №{item.Number || '-'}
-                    </h3>
-                    <button className="modal-close-button" onClick={onClose}>
-                        <X className="w-6 h-6" />
-                    </button>
-                </div>
-                
-                <div className="details-grid">
-                    {/* Номер перевозки */}
-                    <div className="details-item">
-                        <div className="details-label">Номер перевозки</div>
-                        <div className="details-value">{item.Number || '-'}</div>
-                    </div>
-                    {/* Статус */}
-                    <div className="details-item">
-                        <div className="details-label">Статус</div>
-                        <div className={getStatusClass(item.State)}>{item.State || '-'}</div>
-                    </div>
-                    {/* Дата прихода */}
-                    <div className="details-item">
-                        <div className="details-label">Дата прихода</div>
-                        <div className="details-value">{formatDate(item.DatePrih)}</div>
-                    </div>
-                    {/* Дата вручения */}
-                    <div className="details-item">
-                        <div className="details-label">Дата вручения</div>
-                        <div className="details-value">{formatDate(item.DateVruch)}</div>
-                    </div>
-                    {/* Кол-во мест */}
-                    <div className="details-item">
-                        <div className="details-label">Кол-во мест</div>
-                        <div className="details-value flex items-center"><Layers className="w-4 h-4 mr-1 text-theme-primary" />{renderValue(item.Mest)}</div>
-                    </div>
-                    {/* Платный вес */}
-                    <div className="details-item">
-                        <div className="details-label">Платный вес</div>
-                        <div className="details-value flex items-center"><Scale className="w-4 h-4 mr-1 text-theme-primary" />{renderValue(item.PV || item.PaymentWeight, 'кг')}</div>
-                    </div>
-                    {/* Общий вес */}
-                    <div className="details-item">
-                        <div className="details-label">Общий вес</div>
-                        <div className="details-value flex items-center"><Weight className="w-4 h-4 mr-1 text-theme-primary" />{renderValue(item.Weight, 'кг')}</div>
-                    </div>
-                    {/* Объем */}
-                    <div className="details-item">
-                        <div className="details-label">Объем</div>
-                        <div className="details-value flex items-center"><List className="w-4 h-4 mr-1 text-theme-primary" />{renderValue(item.Volume, 'м³')}</div>
-                    </div>
-                    {/* Стоимость */}
-                    <div className="details-item">
-                        <div className="details-label">Стоимость</div>
-                        <div className="details-value flex items-center"><DollarSign className="w-4 h-4 mr-1 text-theme-primary" />{formatCurrency(item.Sum || item.Total)}</div>
-                    </div>
-                    {/* Статус счета */}
-                    <div className="details-item">
-                        <div className="details-label">Статус счета</div>
-                        <div className="details-value">{item.StatusSchet || '-'}</div>
-                    </div>
-                </div>
+  // Хелпер для форматирования валюты
+  const formatMoney = (val: any) => {
+    if (!val) return "-";
+    const num = typeof val === "string" ? parseFloat(val.replace(",", ".")) : val;
+    return new Intl.NumberFormat("ru-RU", {
+      style: "currency",
+      currency: "RUB",
+      minimumFractionDigits: 0,
+    }).format(num);
+  };
 
-                <h4><FileTextIcon className="w-4 h-4 mr-2 inline-block text-theme-secondary" />Документы для скачивания</h4>
-                <div className="document-buttons">
-                    <button className="doc-button" onClick={() => handleDownload('ЭР')}>
-                        <Download className="w-4 h-4 mr-2" /> ЭР
-                    </button>
-                    <button className="doc-button" onClick={() => handleDownload('АПП')}>
-                        <Download className="w-4 h-4 mr-2" /> АПП
-                    </button>
-                    <button className="doc-button" onClick={() => handleDownload('СЧЕТ')}>
-                        <Download className="w-4 h-4 mr-2" /> СЧЕТ
-                    </button>
-                    <button className="doc-button" onClick={() => handleDownload('УПД')}>
-                        <Download className="w-4 h-4 mr-2" /> УПД
-                    </button>
-                </div>
+  // Заглушка для скачивания (или реальный вызов вашего API /api/download)
+  const handleDownload = async (docType: string) => {
+    if (!item.Number) return alert("Нет номера для скачивания");
+    setDownloading(docType);
+    try {
+      // Пример вызова вашего прокси
+      const res = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          login: auth.login,
+          password: auth.password,
+          metod: docType,
+          number: item.Number,
+        }),
+      });
+      if (!res.ok) throw new Error("Ошибка скачивания");
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${docType}_${item.Number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error(e);
+      alert("Не удалось скачать документ");
+    } finally {
+      setDownloading(null);
+    }
+  };
 
-            </div>
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Перевозка №{item.Number}</h3>
+          <button className="modal-close-button" onClick={onClose}>
+            ✕
+          </button>
         </div>
-    );
-}
 
+        {/* Кнопки действий: Чат / Поделиться */}
+        <div className="action-buttons" style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button className="button" style={{ background: '#3b82f6' }} onClick={() => window.open('https://t.me/haulz_support', '_blank')}>
+                Чат
+            </button>
+             <button className="button" style={{ background: '#3b82f6' }} onClick={() => navigator.clipboard.writeText(`Груз №${item.Number} - ${item.State}`)}>
+                Поделиться
+            </button>
+        </div>
+
+        <div className="details-grid">
+          <div className="details-item">
+            <span className="details-label">Статус</span>
+            <span className="details-value">{item.State || "-"}</span>
+          </div>
+          <div className="details-item">
+            <span className="details-label">Дата прихода</span>
+            <span className="details-value">{item.DatePrih || "-"}</span>
+          </div>
+          <div className="details-item">
+            <span className="details-label">Дата вручения</span>
+            <span className="details-value">{item.DateVruch || "-"}</span>
+          </div>
+          <div className="details-item">
+            <span className="details-label">Мест</span>
+            <span className="details-value">{item.Mest || "-"}</span>
+          </div>
+
+          {/* ПЛАТНЫЙ ВЕС (PV) */}
+          <div className="details-item" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)' }}>
+            <span className="details-label" style={{ color: '#2563eb' }}>Платный вес</span>
+            <span className="details-value" style={{ color: '#2563eb' }}>
+              {renderValue(item.PV || item.PaymentWeight, "кг")}
+            </span>
+          </div>
+
+          <div className="details-item">
+            <span className="details-label">Вес</span>
+            <span className="details-value">{renderValue(item.Weight, "кг")}</span>
+          </div>
+          <div className="details-item">
+            <span className="details-label">Объем</span>
+            <span className="details-value">{renderValue(item.Volume, "м³")}</span>
+          </div>
+           <div className="details-item">
+            <span className="details-label">Стоимость</span>
+            <span className="details-value">{formatMoney(item.Sum || item.Total)}</span>
+          </div>
+           <div className="details-item">
+            <span className="details-label">Статус счета</span>
+            <span className="details-value">{item.StatusSchet || "-"}</span>
+          </div>
+        </div>
+
+        <h4 style={{ marginTop: '20px', marginBottom: '10px' }}>Документы</h4>
+        <div className="document-buttons" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {["ЭР", "АПП", "СЧЕТ", "УПД"].map((doc) => (
+            <button
+              key={doc}
+              className="doc-button"
+              onClick={() => handleDownload(doc)}
+              disabled={downloading === doc}
+              style={{ 
+                  flex: '1 1 40%', 
+                  padding: '10px', 
+                  borderRadius: '8px', 
+                  border: '1px solid #e5e7eb', 
+                  background: 'white', 
+                  cursor: 'pointer',
+                  fontWeight: '600'
+              }}
+            >
+              {downloading === doc ? "..." : doc}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 // ----------------- КОМПОНЕНТ С ГРУЗАМИ (CargoPage) -----------------
 
 type CargoPageProps = { 
