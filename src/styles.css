@@ -323,3 +323,36 @@ body {
 }
 
 /* Стили для кнопок таббара определены через комбинацию классов в App.tsx */
+/* --- Стили для деталей груза (CargoDetailModal) --- */
+
+.details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+    font-size: 0.9rem;
+}
+
+.details-item {
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--color-border);
+}
+
+.details-label {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.details-value {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+/* Стили для выделения "Платного веса" и "Статуса счета" */
+.highlighted-detail {
+    background-color: var(--color-ai-bg); /* Используем фоновый цвет для выделения */
+    padding: 4px 8px;
+    margin: -4px -8px; /* Расширяем padding для полного охвата */
+    border-radius: 4px;
+}
