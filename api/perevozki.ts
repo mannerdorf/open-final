@@ -4,7 +4,7 @@ const BASE_URL =
   "https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetPerevozki";
 
 // сервисный Basic-auth: admin:juebfnye
-const SERVICE_AUTH = "Basic YWRtaW56anVlYmZueWU=";
+const SERVICE_AUTH = "Basic YWRtaW46anVlYmZueWU=";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -25,8 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const {
     login,
     password,
-    // Используем даты из тела запроса фронтенда
-    dateFrom = "2024-01-01", 
+    dateFrom = "2024-01-01",
     dateTo = "2026-01-01",
   } = body || {};
 
@@ -34,42 +33,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "login and password are required" });
   }
 
-  // URL с параметрами DateB и DateE
+  // URL как в Postman (с датами)
   const url = new URL(BASE_URL);
   url.searchParams.set("DateB", dateFrom);
   url.searchParams.set("DateE", dateTo);
 
   try {
     const upstream = await fetch(url.toString(), {
-      method: "GET", // Перевозки обычно GET
+      method: "GET",
       headers: {
-        // Авторизация пользователя для 1С
-        "Auth": `Basic ${btoa(`${login}:${password}`)}`, 
-        // Сервисная авторизация для доступа к API 1С
-        "Authorization": SERVICE_AUTH,
+        // как в Postman:
+        // Auth: Basic order@lal-auto.com:ZakaZ656565
+        Auth: `Basic ${login}:${password}`,
+        // Authorization: Basic YWRtaW46anVlYmZueWU=
+        Authorization: SERVICE_AUTH,
       },
     });
 
     const text = await upstream.text();
 
     if (!upstream.ok) {
-      // пробуем вернуть текст 1С как JSON с ошибкой
-      let errorBody = {};
-      try {
-        errorBody = JSON.parse(text);
-      } catch {
-        errorBody = { error: `Upstream error: ${upstream.status}`, details: text.substring(0, 100) };
-      }
-      return res.status(upstream.status).json(errorBody);
+      // пробуем вернуть текст 1С как есть
+      return res.status(upstream.status).send(
+        text || {
+          error: `Upstream error: ${upstream.status}`,
+        }
+      );
     }
 
-    // Возвращаем JSON
+    // если это JSON — вернём JSON, если нет — просто текст
     try {
       const json = JSON.parse(text);
       return res.status(200).json(json);
     } catch {
-      // Если 1С вернул не JSON, что является ошибкой в этом контексте
-      return res.status(500).json({ error: "Invalid JSON response from upstream API" });
+      return res.status(200).send(text);
     }
   } catch (e: any) {
     console.error("Proxy error:", e);
