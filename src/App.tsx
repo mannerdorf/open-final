@@ -27,15 +27,9 @@ type CargoStat = {
     key: string; label: string; icon: React.ElementType; value: number | string; unit: string; bgColor: string;
 };
 
-type CargoListState = {
-    list: CargoItem[] | null;
-    isLoading: boolean;
-    error: string | null;
-};
-
 // --- CONSTANTS ---
-const DEFAULT_LOGIN = "order@lal-auto.com";
-const DEFAULT_PASSWORD = "ZakaZ656565";
+// УДАЛЕНЫ: DEFAULT_LOGIN и DEFAULT_PASSWORD. 
+// Инициализация будет пустой строкой.
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 const getSixMonthsAgoDate = () => {
@@ -46,14 +40,37 @@ const getSixMonthsAgoDate = () => {
 const DEFAULT_DATE_FROM = getSixMonthsAgoDate();
 const DEFAULT_DATE_TO = getTodayDate();
 
-// --- STATS STRUCTURE (Templates) ---
-// Мы используем структуру, но значения будем подставлять динамически в HomePage
-const STATS_TEMPLATE_LEVEL_1: CargoStat[] = [
-    { key: 'total', label: 'Всего перевозок', icon: LayoutGrid, value: 0, unit: 'шт', bgColor: 'bg-indigo-500' },
-    { key: 'payments', label: 'Счета', icon: RussianRuble, value: 0, unit: '₽', bgColor: 'bg-green-500' },
-    { key: 'weight', label: 'Вес', icon: TrendingUp, value: 0, unit: 'кг', bgColor: 'bg-yellow-500' },
-    { key: 'volume', label: 'Объем', icon: Maximize, value: 0, unit: 'м³', bgColor: 'bg-pink-500' },
+// --- STATS DATA (Для примера на главной) ---
+const STATS_LEVEL_1: CargoStat[] = [
+    { key: 'total', label: 'Всего перевозок', icon: LayoutGrid, value: 125, unit: 'шт', bgColor: 'bg-indigo-500' },
+    { key: 'payments', label: 'Счета', icon: RussianRuble, value: '1,250,000', unit: '₽', bgColor: 'bg-green-500' },
+    { key: 'weight', label: 'Вес', icon: TrendingUp, value: 5400, unit: 'кг', bgColor: 'bg-yellow-500' },
+    { key: 'volume', label: 'Объем', icon: Maximize, value: 125, unit: 'м³', bgColor: 'bg-pink-500' },
 ];
+
+const STATS_LEVEL_2: { [key: string]: CargoStat[] } = {
+    total: [
+        { key: 'total_new', label: 'В работе', icon: Truck, value: 35, unit: 'шт', bgColor: 'bg-blue-400' },
+        { key: 'total_in_transit', label: 'В пути', icon: TrendingUp, value: 50, unit: 'шт', bgColor: 'bg-indigo-400' },
+        { key: 'total_completed', label: 'Завершено', icon: Check, value: 40, unit: 'шт', bgColor: 'bg-green-400' },
+        { key: 'total_cancelled', label: 'Отменено', icon: X, value: 0, unit: 'шт', bgColor: 'bg-red-400' },
+    ],
+    payments: [
+        { key: 'pay_paid', label: 'Оплачено', icon: ClipboardCheck, value: 750000, unit: '₽', bgColor: 'bg-green-400' },
+        { key: 'pay_due', label: 'К оплате', icon: CreditCard, value: 500000, unit: '₽', bgColor: 'bg-yellow-400' },
+        { key: 'pay_none', label: 'Нет счета', icon: Minus, value: 0, unit: 'шт', bgColor: 'bg-gray-400' },
+    ],
+    weight: [
+        { key: 'weight_current', label: 'Общий вес', icon: Weight, value: 5400, unit: 'кг', bgColor: 'bg-red-400' },
+        { key: 'weight_paid', label: 'Платный вес', icon: Scale, value: 4500, unit: 'кг', bgColor: 'bg-orange-400' },
+        { key: 'weight_free', label: 'Бесплатный вес', icon: Layers, value: 900, unit: 'кг', bgColor: 'bg-purple-400' },
+    ],
+    volume: [
+        { key: 'vol_current', label: 'Объем всего', icon: Maximize, value: 125, unit: 'м³', bgColor: 'bg-pink-400' },
+        { key: 'vol_boxes', label: 'Кол-во мест', icon: Layers, value: 125, unit: 'шт', bgColor: 'bg-teal-400' },
+    ],
+};
+
 
 // --- HELPERS ---
 const getDateRange = (filter: DateFilter) => {
@@ -82,12 +99,16 @@ const formatDate = (dateString: string | undefined): string => {
 const formatCurrency = (value: number | string | undefined): string => {
     if (!value) return '-';
     const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
-    return isNaN(num) ? String(value) : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(num);
+    return isNaN(num) ? String(value) : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(num);
 };
 
+// ОБНОВЛЕНО: Разные цвета для статусов
 const getStatusClass = (status: string | undefined) => {
     const lower = (status || '').toLowerCase();
     if (lower.includes('доставлен') || lower.includes('заверш')) return 'status-value success';
+    if (lower.includes('пути') || lower.includes('отправлен')) return 'status-value transit';
+    if (lower.includes('принят') || lower.includes('оформлен')) return 'status-value accepted';
+    if (lower.includes('готов')) return 'status-value ready';
     return 'status-value';
 };
 
@@ -105,23 +126,9 @@ const getFilterKeyByStatus = (s: string | undefined): StatusFilter => {
 const STATUS_MAP: Record<StatusFilter, string> = { "all": "Все", "accepted": "Принят", "in_transit": "В пути", "ready": "Готов", "delivering": "На доставке", "delivered": "Доставлено" };
 
 // --- API FUNCTION ---
-const fetchCargoListApi = async (auth: AuthData, dateFrom: string, dateTo: string) => {
-    const res = await fetch(PROXY_API_BASE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: auth.login, password: auth.password, dateFrom, dateTo }),
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Ошибка: ${res.status} ${text.substring(0, 50)}`);
-    }
-    const data = await res.json();
-    const list = Array.isArray(data) ? data : data.items || [];
-    return list.map((item: any) => ({
-        Number: item.Number, DatePrih: item.DatePrih, DateVruch: item.DateVruch, State: item.State, Mest: item.Mest, 
-        PV: item.PV || item.PaymentWeight, Weight: item.Weight, Volume: item.Volume, Sum: item.Sum, StatusSchet: item.StatusSchet, ...item
-    }));
-};
+// (Оставлена здесь, но в реальном коде должна быть в App)
+/* const fetchCargoListApi = async (auth: AuthData, dateFrom: string, dateTo: string) => { ... } */
+
 
 // ================== COMPONENTS ==================
 
@@ -130,54 +137,10 @@ function HomePage({ cargoList, isLoading, error, auth, fetchList }: { cargoList:
     const [filterLevel, setFilterLevel] = useState<1 | 2>(1);
     const [currentFilter, setCurrentFilter] = useState<string | null>(null);
 
-    // Загружаем данные при входе на главную, если их нет
-    useEffect(() => {
-        if (!cargoList && !isLoading && !error) {
-            fetchList(auth, DEFAULT_DATE_FROM, DEFAULT_DATE_TO);
-        }
-    }, [cargoList, isLoading, error, auth, fetchList]);
-
-    // Динамический расчет статистики на основе cargoList
+    // Временная заглушка, пока не включена настоящая логика расчета
     const statsData = useMemo(() => {
-        const list = cargoList || [];
-        const totalCount = list.length;
-        const totalSum = list.reduce((acc, item) => acc + (parseFloat(item.Sum) || 0), 0);
-        const totalWeight = list.reduce((acc, item) => acc + (parseFloat(item.Weight) || 0), 0);
-        const totalVolume = list.reduce((acc, item) => acc + (parseFloat(item.Volume) || 0), 0);
-
-        // Уровень 1 (Главные плитки)
-        const level1 = [
-            { key: 'total', label: 'Всего перевозок', icon: LayoutGrid, value: totalCount, unit: 'шт', bgColor: 'bg-indigo-500' },
-            { key: 'payments', label: 'Счета', icon: RussianRuble, value: formatCurrency(totalSum), unit: '₽', bgColor: 'bg-green-500' },
-            { key: 'weight', label: 'Вес', icon: TrendingUp, value: Math.round(totalWeight).toLocaleString(), unit: 'кг', bgColor: 'bg-yellow-500' },
-            { key: 'volume', label: 'Объем', icon: Maximize, value: totalVolume.toFixed(1), unit: 'м³', bgColor: 'bg-pink-500' },
-        ];
-
-        // Уровень 2 (Детализация)
-        const level2: { [key: string]: CargoStat[] } = {
-            total: [
-                { key: 'total_new', label: 'В работе', icon: Truck, value: list.filter(i => !['delivered', 'completed'].includes(getFilterKeyByStatus(i.State))).length, unit: 'шт', bgColor: 'bg-blue-400' },
-                { key: 'total_in_transit', label: 'В пути', icon: TrendingUp, value: list.filter(i => getFilterKeyByStatus(i.State) === 'in_transit').length, unit: 'шт', bgColor: 'bg-indigo-400' },
-                { key: 'total_completed', label: 'Завершено', icon: Check, value: list.filter(i => getFilterKeyByStatus(i.State) === 'delivered').length, unit: 'шт', bgColor: 'bg-green-400' },
-                { key: 'total_cancelled', label: 'Отменено', icon: X, value: 0, unit: 'шт', bgColor: 'bg-red-400' },
-            ],
-            payments: [
-                { key: 'pay_paid', label: 'Оплачено', icon: ClipboardCheck, value: 0, unit: '₽', bgColor: 'bg-green-400' }, // Логика счетов требует доп. полей
-                { key: 'pay_due', label: 'К оплате', icon: CreditCard, value: 0, unit: '₽', bgColor: 'bg-yellow-400' },
-                { key: 'pay_none', label: 'Нет счета', icon: Minus, value: 0, unit: 'шт', bgColor: 'bg-gray-400' },
-            ],
-            weight: [
-                { key: 'weight_current', label: 'Общий вес', icon: Weight, value: Math.round(totalWeight), unit: 'кг', bgColor: 'bg-red-400' },
-                { key: 'weight_paid', label: 'Платный вес', icon: Scale, value: Math.round(list.reduce((acc, i) => acc + (parseFloat(i.PV) || 0), 0)), unit: 'кг', bgColor: 'bg-orange-400' },
-                { key: 'weight_places', label: 'Мест', icon: Layers, value: list.reduce((acc, i) => acc + (parseFloat(i.Mest) || 0), 0), unit: 'шт', bgColor: 'bg-purple-400' },
-            ],
-            volume: [
-                { key: 'vol_current', label: 'Объем всего', icon: Maximize, value: totalVolume.toFixed(1), unit: 'м³', bgColor: 'bg-pink-400' },
-                { key: 'vol_boxes', label: 'Кол-во мест', icon: Layers, value: list.reduce((acc, i) => acc + (parseFloat(i.Mest) || 0), 0), unit: 'шт', bgColor: 'bg-teal-400' },
-            ],
-        };
-
-        return { level1, level2 };
+        // Здесь должна быть логика расчета, пока используем заглушки
+        return { level1: STATS_LEVEL_1, level2: STATS_LEVEL_2 };
     }, [cargoList]);
 
     const currentStats = useMemo(() => {
@@ -194,7 +157,6 @@ function HomePage({ cargoList, isLoading, error, auth, fetchList }: { cargoList:
 
     return (
         <div className="w-full max-w-lg">
-            {/* Плитки статистики ТЕПЕРЬ ЗДЕСЬ */}
             <div className="stats-grid">
                 {currentStats.map((stat, idx) => (
                     <div key={stat.key} className={`stat-card ${stat.bgColor}`} onClick={() => handleStatClick(stat.key)}>
@@ -213,14 +175,18 @@ function HomePage({ cargoList, isLoading, error, auth, fetchList }: { cargoList:
             {/* Состояние загрузки для главной */}
             {isLoading && <div className="text-center py-8"><Loader2 className="animate-spin w-6 h-6 mx-auto text-theme-primary" /><p className="text-sm text-theme-secondary">Обновление данных...</p></div>}
             {error && <div className="login-error"><AlertTriangle className="w-5 h-5 mr-2"/>{error}</div>}
-            {!isLoading && !error && !cargoList && <div className="text-center text-theme-secondary py-4">Нет данных для отображения</div>}
         </div>
     );
 }
 
 
 // --- CARGO PAGE (LIST ONLY) ---
-function CargoPage({ auth, searchText, cargoList, isLoading, error, fetchList, setSelectedCargo }: any) {
+function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string }) {
+    const [items, setItems] = useState<CargoItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedCargo, setSelectedCargo] = useState<CargoItem | null>(null);
+    
     // Filters State
     const [dateFilter, setDateFilter] = useState<DateFilter>("all");
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -230,34 +196,52 @@ function CargoPage({ auth, searchText, cargoList, isLoading, error, fetchList, s
     const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
 
-    // Load data on mount or filter change
     const apiDateRange = useMemo(() => dateFilter === "custom" ? { dateFrom: customDateFrom, dateTo: customDateTo } : getDateRange(dateFilter), [dateFilter, customDateFrom, customDateTo]);
-    
-    useEffect(() => {
-        fetchList(auth, apiDateRange.dateFrom, apiDateRange.dateTo);
-    }, [apiDateRange, auth]); // eslint-disable-line
+
+    const loadCargo = useCallback(async (dateFrom: string, dateTo: string) => {
+        setLoading(true); setError(null);
+        try {
+            const res = await fetch(PROXY_API_BASE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: auth.login, password: auth.password, dateFrom, dateTo }) });
+            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : data.items || [];
+            // ОБНОВЛЕНО: Добавлен fallback для PV (Платный вес) и включены все данные item
+            setItems(list.map((item: any) => ({
+                ...item,
+                Number: item.Number, DatePrih: item.DatePrih, DateVruch: item.DateVruch, State: item.State, Mest: item.Mest, 
+                PV: item.PV || item.PaymentWeight || item.PW, 
+                Weight: item.Weight, Volume: item.Volume, Sum: item.Sum, StatusSchet: item.StatusSchet
+            })));
+        } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+    }, [auth]);
+
+    useEffect(() => { loadCargo(apiDateRange.dateFrom, apiDateRange.dateTo); }, [apiDateRange, loadCargo]);
 
     // Client-side filtering
     const filteredItems = useMemo(() => {
-        let res = cargoList || [];
-        if (statusFilter !== 'all') res = res.filter((i: any) => getFilterKeyByStatus(i.State) === statusFilter);
+        let res = items;
+        if (statusFilter !== 'all') res = res.filter(i => getFilterKeyByStatus(i.State) === statusFilter);
         if (searchText) {
             const lower = searchText.toLowerCase();
-            res = res.filter((i: any) => [i.Number, i.State, formatDate(i.DatePrih), formatCurrency(i.Sum)].join(' ').toLowerCase().includes(lower));
+            res = res.filter(i => [i.Number, i.State, formatDate(i.DatePrih), formatCurrency(i.Sum), String(i.PV), String(i.Mest)].join(' ').toLowerCase().includes(lower));
         }
         return res;
-    }, [cargoList, statusFilter, searchText]);
+    }, [items, statusFilter, searchText]);
+
 
     return (
         <div className="w-full">
+            {/* Плитки статистики (оставлены здесь, т.к. это основная функция этой страницы ранее) */}
+            <HomePage cargoList={items} isLoading={loading} error={error} auth={auth} fetchList={loadCargo} />
+
             {/* Filters */}
             <div className="filters-container">
                 <div className="filter-group">
                     <button className="filter-button" onClick={() => { setIsDateDropdownOpen(!isDateDropdownOpen); setIsStatusDropdownOpen(false); }}>
-                        Дата: {dateFilter === 'custom' ? 'Период' : (dateFilter === 'all' ? 'Все' : dateFilter)} <ChevronDown className="w-4 h-4"/>
+                        Дата: {dateFilter} <ChevronDown className="w-4 h-4"/>
                     </button>
                     {isDateDropdownOpen && <div className="filter-dropdown">
-                        {['all', 'сегодня', 'неделя', 'месяц', 'custom'].map(key => <div key={key} className="dropdown-item" onClick={() => { setDateFilter(key as any); setIsDateDropdownOpen(false); if(key==='custom') setIsCustomModalOpen(true); }}>{key === 'all' ? 'Все' : key}</div>)}
+                        {['all', 'today', 'week', 'month', 'custom'].map(key => <div key={key} className="dropdown-item" onClick={() => { setDateFilter(key as any); setIsDateDropdownOpen(false); if(key==='custom') setIsCustomModalOpen(true); }}>{key === 'all' ? 'Все' : key}</div>)}
                     </div>}
                 </div>
                 <div className="filter-group">
@@ -270,10 +254,14 @@ function CargoPage({ auth, searchText, cargoList, isLoading, error, fetchList, s
                 </div>
             </div>
 
+            <p className="text-sm text-theme-secondary mb-4 text-center">
+                 Период: {formatDate(apiDateRange.dateFrom)} – {formatDate(apiDateRange.dateTo)}
+            </p>
+
             {/* List */}
-            {isLoading && <div className="text-center py-8"><Loader2 className="animate-spin w-6 h-6 mx-auto text-theme-primary" /></div>}
-            {!isLoading && error && <p className="login-error"><AlertTriangle className="w-5 h-5 mr-2" />{error}</p>}
-            {!isLoading && !error && filteredItems.length === 0 && (
+            {loading && <div className="text-center py-8"><Loader2 className="animate-spin w-6 h-6 mx-auto text-theme-primary" /></div>}
+            {!loading && error && <p className="login-error"><AlertTriangle className="w-5 h-5 mr-2" />{error}</p>}
+            {!loading && !error && filteredItems.length === 0 && (
                 <div className="empty-state-card">
                     <Package className="w-12 h-12 mx-auto mb-4 text-theme-secondary opacity-50" />
                     <p className="text-theme-secondary">Ничего не найдено</p>
@@ -287,19 +275,21 @@ function CargoPage({ auth, searchText, cargoList, isLoading, error, fetchList, s
                         <div className="cargo-details-grid">
                             <div className="detail-item"><Tag className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Статус</div><div className={getStatusClass(item.State)}>{item.State}</div></div>
                             <div className="detail-item"><Layers className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Мест</div><div className="detail-item-value">{item.Mest}</div></div>
-                            <div className="detail-item"><Scale className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Плат. вес</div><div className="detail-item-value">{item.PV}</div></div>
+                            {/* ОБНОВЛЕНО: PV (Платный вес) */}
+                            <div className="detail-item"><Scale className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Плат. вес</div><div className="detail-item-value">{item.PV || '-'}</div></div>
                         </div>
                         <div className="cargo-footer"><span className="sum-label">Сумма</span><span className="sum-value">{formatCurrency(item.Sum)}</span></div>
                     </div>
                 ))}
             </div>
 
+            {selectedCargo && <CargoDetailsModal item={selectedCargo} isOpen={!!selectedCargo} onClose={() => setSelectedCargo(null)} auth={auth} />}
             <FilterDialog isOpen={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} dateFrom={customDateFrom} dateTo={customDateTo} onApply={(f, t) => { setCustomDateFrom(f); setCustomDateTo(t); }} />
         </div>
     );
 }
 
-// --- SHARED COMPONENTS ---
+// --- SHARED COMPONENTS (без изменений, кроме модального окна) ---
 
 function FilterDialog({ isOpen, onClose, dateFrom, dateTo, onApply }: { isOpen: boolean; onClose: () => void; dateFrom: string; dateTo: string; onApply: (from: string, to: string) => void; }) {
     const [tempFrom, setTempFrom] = useState(dateFrom);
@@ -309,7 +299,7 @@ function FilterDialog({ isOpen, onClose, dateFrom, dateTo, onApply }: { isOpen: 
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <div className="modal-header"><h3>Произвольный диапазон</h3><button className="modal-close-button" onClick={onClose}><X /></button></div>
+                <div className="modal-header"><h3>Произвольный диапазон</h3><button className="modal-close-button" onClick={onClose}><X size={20} /></button></div>
                 <form onSubmit={e => { e.preventDefault(); onApply(tempFrom, tempTo); onClose(); }}>
                     <div style={{marginBottom: '1rem'}}><label className="detail-item-label">Дата начала:</label><input type="date" className="login-input date-input" value={tempFrom} onChange={e => setTempFrom(e.target.value)} required /></div>
                     <div style={{marginBottom: '1.5rem'}}><label className="detail-item-label">Дата окончания:</label><input type="date" className="login-input date-input" value={tempTo} onChange={e => setTempTo(e.target.value)} required /></div>
@@ -325,7 +315,11 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
     const [downloadError, setDownloadError] = useState<string | null>(null);
     if (!isOpen) return null;
 
-    const renderValue = (val: any, unit = '') => (val === undefined || val === null || val === "") ? '-' : `${val}${unit ? ' ' + unit : ''}`;
+    const renderValue = (val: any, unit = '') => {
+        if (val === undefined || val === null || val === "" || (typeof val === 'number' && isNaN(val))) return '-';
+        if (typeof val === 'number' && unit.toLowerCase() === 'кг' || unit.toLowerCase() === 'м³') return `${val.toFixed(2)}${unit ? ' ' + unit : ''}`;
+        return `${val}${unit ? ' ' + unit : ''}`;
+    };
     
     const handleDownload = async (docType: string) => {
         if (!item.Number) return alert("Нет номера перевозки");
@@ -339,15 +333,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
         } catch (e: any) { setDownloadError(e.message); } finally { setDownloading(null); }
     };
 
-    const handleChat = () => { 
-        // Используем API Telegram WebApp если доступно, иначе fallback
-        if ((window as any).Telegram?.WebApp?.openTelegramLink) {
-            (window as any).Telegram.WebApp.openTelegramLink('https://t.me/haulz_support');
-        } else {
-            window.open('https://t.me/haulz_support', '_blank');
-        }
-    };
-    
+    const handleChat = () => { window.open('https://t.me/haulz_support', '_blank'); };
     const handleShare = () => { 
         const text = `Перевозка №${item.Number}: ${item.State}, ${formatCurrency(item.Sum)}`;
         if ((window as any).Telegram?.WebApp?.shareUrl) { (window as any).Telegram.WebApp.shareUrl(window.location.origin, { text }); }
@@ -359,7 +345,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
             <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h3>Перевозка №{item.Number}</h3>
-                    <button className="modal-close-button" onClick={onClose}><X /></button>
+                    <button className="modal-close-button" onClick={onClose}><X size={20} /></button>
                 </div>
                 {downloadError && <p className="login-error mb-2">{downloadError}</p>}
                 <div className="document-buttons mb-4">
@@ -367,6 +353,7 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
                     <button className="doc-button" onClick={handleShare}><Send className="w-4 h-4 mr-2"/>Поделиться</button>
                 </div>
                 <div className="details-grid-modal">
+                    {/* ОБНОВЛЕНО: Все поля из CargoItem */}
                     <DetailItem label="Номер" value={item.Number} />
                     <DetailItem label="Статус" value={item.State} statusClass={getStatusClass(item.State)} />
                     <DetailItem label="Приход" value={formatDate(item.DatePrih)} />
@@ -377,6 +364,9 @@ function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, i
                     <DetailItem label="Объем" value={renderValue(item.Volume, 'м³')} icon={<List className="w-4 h-4 mr-1 text-theme-primary"/>} />
                     <DetailItem label="Стоимость" value={formatCurrency(item.Sum)} icon={<RussianRuble className="w-4 h-4 mr-1 text-theme-primary"/>} />
                     <DetailItem label="Счет" value={item.StatusSchet || '-'} highlighted />
+                    {/* ДОПОЛНИТЕЛЬНЫЕ поля, которые могут быть в item (показываем всё, что пришло) */}
+                    {Object.entries(item).filter(([key]) => !['Number', 'DatePrih', 'DateVruch', 'State', 'Mest', 'PV', 'Weight', 'Volume', 'Sum', 'StatusSchet', 'PaymentWeight', 'PW'].includes(key))
+                        .map(([key, val]) => <DetailItem key={key} label={key} value={renderValue(val)} />)}
                 </div>
                 <h4 style={{marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 600}}>Документы</h4>
                 <div className="document-buttons">
@@ -421,14 +411,19 @@ const TabBtn = ({ label, icon, active, onClick }: any) => (
 
 export default function App() {
     const [auth, setAuth] = useState<AuthData | null>(null);
-    const [activeTab, setActiveTab] = useState<Tab>("home"); // По умолчанию Home
+    const [activeTab, setActiveTab] = useState<Tab>("cargo"); 
     const [theme, setTheme] = useState('dark'); 
-    const [cargoList, setCargoList] = useState<CargoItem[] | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
+    
+    // ИНИЦИАЛИЗАЦИЯ ПУСТЫМИ СТРОКАМИ (ИСПРАВЛЕНО)
+    const [login, setLogin] = useState(""); 
+    const [password, setPassword] = useState(""); 
+    
+    const [agreeOffer, setAgreeOffer] = useState(true);
+    const [agreePersonal, setAgreePersonal] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [selectedCargo, setSelectedCargo] = useState<CargoItem | null>(null);
-
-    // Поиск (в шапке)
+    const [showPassword, setShowPassword] = useState(false); 
+    
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [searchText, setSearchText] = useState('');
 
@@ -436,48 +431,85 @@ export default function App() {
     const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
     const handleSearch = (text: string) => setSearchText(text.toLowerCase().trim());
 
-    // Функция загрузки списка (поднята в App, чтобы данные были доступны на главной и в списке)
-    const fetchList = useCallback(async (authData: AuthData, dateFrom: string, dateTo: string) => {
-        setIsLoading(true); setError(null);
-        try {
-            const items = await fetchCargoListApi(authData, dateFrom, dateTo);
-            setCargoList(items);
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    const handleLoginSubmit = async (e: FormEvent, {login, password}: AuthData) => {
+    const handleLoginSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        setIsLoading(true);
+        setError(null);
+        if (!login || !password) return setError("Введите логин и пароль");
+        if (!agreeOffer || !agreePersonal) return setError("Подтвердите согласие с условиями");
+
         try {
+            setLoading(true);
+            const { dateFrom, dateTo } = getDateRange("all");
             const res = await fetch(PROXY_API_BASE_URL, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ login, password, dateFrom: DEFAULT_DATE_FROM, dateTo: DEFAULT_DATE_TO }),
+                method: "POST", 
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ login, password, dateFrom, dateTo }),
             });
-            if (!res.ok) throw new Error("Ошибка авторизации");
-            
-            const authData = { login, password };
-            setAuth(authData);
-            // Сразу загружаем данные при входе
-            fetchList(authData, DEFAULT_DATE_FROM, DEFAULT_DATE_TO);
-            setActiveTab("home"); // На главную после входа
+
+            if (!res.ok) {
+                let message = `Ошибка авторизации: ${res.status}`;
+                try {
+                    const errorData = await res.json() as ApiError;
+                    if (errorData.error) message = errorData.error;
+                } catch { }
+                setError(message);
+                return;
+            }
+            setAuth({ login, password });
+            setActiveTab("home");
         } catch (err: any) {
-            setError(err.message || "Ошибка сети.");
+            setError("Ошибка сети.");
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
     };
 
     const handleLogout = () => {
-        setAuth(null); setActiveTab("home"); setError(null); 
-        setIsSearchExpanded(false); setSearchText(''); setCargoList(null);
+        setAuth(null);
+        setActiveTab("cargo");
+        setPassword(""); 
+        setIsSearchExpanded(false); setSearchText('');
     }
 
     if (!auth) {
-        return <LoginScreen onLogin={handleLoginSubmit} isLoading={isLoading} error={error} />;
+        return (
+            <div className={`app-container login-form-wrapper`}>
+                <div className="login-card">
+                    <div className="absolute top-4 right-4">
+                        <button className="theme-toggle-button-login" onClick={toggleTheme}>
+                            {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5" />}
+                        </button>
+                    </div>
+                    <div className="flex justify-center mb-4 h-10 mt-6"><div className="logo-text">HAULZ</div></div>
+                    <div className="tagline">Доставка грузов в Калининград и обратно</div>
+                    <form onSubmit={handleLoginSubmit} className="form">
+                        <div className="field">
+                            <input className="login-input" type="text" placeholder="Логин (email)" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" />
+                        </div>
+                        <div className="field">
+                            <div className="password-input-container">
+                                <input className="login-input password" type={showPassword ? "text" : "password"} placeholder="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" style={{paddingRight: '3rem'}} />
+                                <button type="button" className="toggle-password-visibility" onClick={() => setShowPassword(!showPassword)}>
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
+                        </div>
+                        <label className="checkbox-row switch-wrapper">
+                            <span>Согласие с <a href="#">публичной офертой</a></span>
+                            <div className={`switch-container ${agreeOffer ? 'checked' : ''}`} onClick={() => setAgreeOffer(!agreeOffer)}><div className="switch-knob"></div></div>
+                        </label>
+                        <label className="checkbox-row switch-wrapper">
+                            <span>Согласие на <a href="#">обработку данных</a></span>
+                            <div className={`switch-container ${agreePersonal ? 'checked' : ''}`} onClick={() => setAgreePersonal(!agreePersonal)}><div className="switch-knob"></div></div>
+                        </label>
+                        <button className="button-primary" type="submit" disabled={loading}>
+                            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : "Подтвердить"}
+                        </button>
+                    </form>
+                    {error && <p className="login-error mt-4"><AlertTriangle className="w-5 h-5 mr-2" />{error}</p>}
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -497,86 +529,16 @@ export default function App() {
                     {searchText && <button className="search-toggle-button" onClick={() => { setSearchText(''); handleSearch(''); }}><X className="w-4 h-4" /></button>}
                 </div>
             </header>
-
             <div className="app-main">
                 <div className="w-full max-w-4xl">
-                    {activeTab === "home" && (
-                        <HomePage 
-                            cargoList={cargoList} 
-                            isLoading={isLoading} 
-                            error={error} 
-                            auth={auth} 
-                            fetchList={fetchList} 
-                        />
-                    )}
-                    {activeTab === "cargo" && (
-                        <CargoPage 
-                            auth={auth} 
-                            searchText={searchText} 
-                            cargoList={cargoList} 
-                            isLoading={isLoading} 
-                            error={error}
-                            fetchList={fetchList}
-                            setSelectedCargo={setSelectedCargo}
-                        />
-                    )}
+                    {activeTab === "home" && <StubPage title="Главная" />}
+                    {activeTab === "cargo" && <CargoPage auth={auth} searchText={searchText} />}
                     {activeTab === "docs" && <StubPage title="Документы" />}
                     {activeTab === "support" && <StubPage title="Поддержка" />}
                     {activeTab === "profile" && <StubPage title="Профиль" />}
                 </div>
             </div>
-            
-            {selectedCargo && <CargoDetailsModal item={selectedCargo} isOpen={!!selectedCargo} onClose={() => setSelectedCargo(null)} auth={auth} />}
             <TabBar active={activeTab} onChange={setActiveTab} />
-        </div>
-    );
-}
-
-// --- LOGIN SCREEN COMPONENT (Isolated for clarity) ---
-function LoginScreen({ onLogin, isLoading, error }: { onLogin: any, isLoading: boolean, error: string | null }) {
-    const [login, setLogin] = useState(DEFAULT_LOGIN);
-    const [password, setPassword] = useState(DEFAULT_PASSWORD);
-    const [agreeOffer, setAgreeOffer] = useState(true);
-    const [agreePersonal, setAgreePersonal] = useState(true);
-    const [showPassword, setShowPassword] = useState(false);
-    const [isThemeLight, setIsThemeLight] = useState(false);
-
-    return (
-        <div className={`app-container login-form-wrapper ${isThemeLight ? 'light-mode' : ''}`}>
-            <div className="login-card">
-                <div className="absolute top-4 right-4">
-                     <button className="theme-toggle-button-login" onClick={() => {setIsThemeLight(!isThemeLight); document.body.classList.toggle('light-mode'); }}>
-                        {isThemeLight ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
-                    </button>
-                </div>
-                <div className="flex justify-center mb-4 h-10 mt-6"><div className="logo-text">HAULZ</div></div>
-                <div className="tagline">Доставка грузов в Калининград и обратно</div>
-                <form onSubmit={(e) => onLogin(e, {login, password})} className="form">
-                    <div className="field">
-                        <input className="login-input" type="text" placeholder="Логин (email)" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" />
-                    </div>
-                    <div className="field">
-                        <div className="password-input-container">
-                            <input className="login-input password" type={showPassword ? "text" : "password"} placeholder="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" style={{paddingRight: '3rem'}} />
-                            <button type="button" className="toggle-password-visibility" onClick={() => setShowPassword(!showPassword)}>
-                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                            </button>
-                        </div>
-                    </div>
-                    <label className="checkbox-row switch-wrapper">
-                        <span>Согласие с <a href="#">публичной офертой</a></span>
-                        <div className={`switch-container ${agreeOffer ? 'checked' : ''}`} onClick={() => setAgreeOffer(!agreeOffer)}><div className="switch-knob"></div></div>
-                    </label>
-                    <label className="checkbox-row switch-wrapper">
-                        <span>Согласие на <a href="#">обработку данных</a></span>
-                        <div className={`switch-container ${agreePersonal ? 'checked' : ''}`} onClick={() => setAgreePersonal(!agreePersonal)}><div className="switch-knob"></div></div>
-                    </label>
-                    <button className="button-primary" type="submit" disabled={isLoading}>
-                        {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Подтвердить"}
-                    </button>
-                </form>
-                {error && <p className="login-error mt-4"><AlertTriangle className="w-5 h-5 mr-2" />{error}</p>}
-            </div>
         </div>
     );
 }
