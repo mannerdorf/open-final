@@ -1,21 +1,21 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import https from "https";
+import { URL } from "url";
 
-// URL 1С
 const EXTERNAL_API_BASE_URL =
   "https://tdn.postb.ru/workbase/hs/DeliveryWebService/GetFile";
 
-// Админский Base64-токен (строго как в curl)
+// Authorization: Basic YWRtaW46anVlYmZueWU=
 const SERVICE_AUTH = "Basic YWRtaW46anVlYmZueWU=";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Фронт шлёт только POST — это проверяем
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    // На Vercel body бывает строкой, приводим к объекту
+    // Vercel иногда даёт body строкой
     let body: any = req.body;
     if (typeof body === "string") {
       try {
@@ -33,71 +33,95 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Формируем URL как в рабочем curl:
-    // /GetFile?metod=ЭР&Number=000107984
-    const url =
-      `${EXTERNAL_API_BASE_URL}` +
-      `?metod=${encodeURIComponent(metod)}` +
-      `&Number=${encodeURIComponent(number)}`;
+    // Формируем URL ровно как в Postman/curl:
+    // https://.../GetFile?metod=ЭР&Number=000107984
+    const fullUrl = new URL(EXTERNAL_API_BASE_URL);
+    fullUrl.searchParams.set("metod", metod);
+    fullUrl.searchParams.set("Number", number);
 
-    console.log("➡️ GetFile URL:", url);
+    console.log("➡️ GetFile URL:", fullUrl.toString());
 
-    // Делаем запрос — порядок заголовков 1 в 1, как у тебя
-    const upstream = await fetch(url, {
+    const options: https.RequestOptions = {
+      protocol: fullUrl.protocol,
+      hostname: fullUrl.hostname,
+      port: fullUrl.port || 443,
+      path: fullUrl.pathname + fullUrl.search,
       method: "GET",
       headers: {
-        // 1) сначала Auth (клиентский логин/пароль НЕ base64)
+        // Порядок как в твоём curl:
+        // --header 'Auth: Basic order@lal-auto.com:ZakaZ656565'
+        // --header 'Authorization: Basic YWRtaW46anVlYmZueWU='
         Auth: `Basic ${login}:${password}`,
-
-        // 2) потом Authorization (админский base64)
         Authorization: SERVICE_AUTH,
+        Accept: "*/*",
+        "Accept-Encoding": "identity",
+        "User-Agent": "curl/7.88.1",
+        Host: fullUrl.host,
       },
+    };
+
+    const upstreamReq = https.request(options, (upstreamRes) => {
+      const statusCode = upstreamRes.statusCode || 500;
+      const contentType =
+        upstreamRes.headers["content-type"] || "application/octet-stream";
+      const contentDisposition =
+        upstreamRes.headers["content-disposition"] ||
+        `attachment; filename="${encodeURIComponent(
+          `${metod}_${number}.pdf`,
+        )}"`;
+
+      console.log(
+        "⬅️ Upstream status:",
+        statusCode,
+        "type:",
+        contentType,
+        "len:",
+        upstreamRes.headers["content-length"],
+      );
+
+      // Если 1С вернула ошибку — просто пробрасываем как есть
+      if (statusCode < 200 || statusCode >= 300) {
+        res.status(statusCode);
+        // может быть текст/JSON — просто прокидываем
+        upstreamRes.pipe(res);
+        return;
+      }
+
+      // Нормальный сценарий — прокидываем файл потоком
+      res.status(200);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", contentDisposition);
+
+      upstreamRes.on("error", (err) => {
+        console.error("🔥 Upstream stream error:", err.message);
+        if (!res.headersSent) {
+          res
+            .status(500)
+            .json({ error: "Upstream stream error", message: err.message });
+        } else {
+          res.end();
+        }
+      });
+
+      upstreamRes.pipe(res);
     });
 
-    const status = upstream.status;
-    const contentType =
-      upstream.headers.get("content-type") || "application/octet-stream";
+    upstreamReq.on("error", (err) => {
+      console.error("🔥 Proxy request error:", err.message);
+      if (!res.headersSent) {
+        res
+          .status(500)
+          .json({ error: "Proxy request error", message: err.message });
+      } else {
+        res.end();
+      }
+    });
 
-    // Если 1С вернула ошибку — пробрасываем как есть
-    if (!upstream.ok) {
-      const text = await upstream.text().catch(() => "");
-      console.error("⛔ Upstream error:", status, text);
-      return res.status(status).send(text || `Upstream error ${status}`);
-    }
-
-    // Если 1С вернула JSON/текст — значит файл не найден или ошибка формирования
-    if (
-      contentType.includes("application/json") ||
-      contentType.startsWith("text/")
-    ) {
-      const text = await upstream.text();
-      console.error("⚠️ Upstream returned JSON instead of file:", text);
-      return res.status(502).json({
-        error: "Upstream returned non-file response",
-        body: text,
-      });
-    }
-
-    // Формируем имя файла
-    const upstreamDisposition = upstream.headers.get("content-disposition");
-    const fallbackFilename = `${metod}_${number}.pdf`;
-    const contentDisposition =
-      upstreamDisposition ||
-      `attachment; filename="${encodeURIComponent(fallbackFilename)}"`;
-
-    // Передаём файл как бинарь
-    const arrayBuffer = await upstream.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    res
-      .status(200)
-      .setHeader("Content-Type", contentType)
-      .setHeader("Content-Disposition", contentDisposition)
-      .send(buffer);
+    upstreamReq.end();
   } catch (err: any) {
-    console.error("🔥 Proxy error:", err?.message || err);
+    console.error("🔥 Proxy handler error:", err?.message || err);
     return res
       .status(500)
-      .json({ error: "Proxy fetch failed", message: err?.message });
+      .json({ error: "Proxy handler failed", message: err?.message });
   }
 }
