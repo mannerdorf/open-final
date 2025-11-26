@@ -496,26 +496,43 @@ export default function App() {
     const [searchText, setSearchText] = useState('');
 
 
-    // --- AUTO AUTH FROM TELEGRAM STORAGE ---
+    
+    // --- AUTO AUTH FROM TELEGRAM STORAGE (WITH VALIDATION) ---
     useEffect(() => {
         if (!isTg()) return;
         const savedAuth = WebApp.storage.getItem("haulz_auth");
         if (savedAuth === "1") {
-            const savedLogin = WebApp.storage.getItem("haulz_auth_login");
-            const savedPassword = WebApp.storage.getItem("haulz_auth_password");
-            if (savedLogin && savedPassword) {
-                setAuth({ login: savedLogin, password: savedPassword });
-                const savedTab = WebApp.storage.getItem("haulz_last_tab");
-                if (savedTab) {
-                    setActiveTab(savedTab as Tab);
-                } else {
-                    setActiveTab("home");
-                }
+            const login = WebApp.storage.getItem("haulz_auth_login");
+            const password = WebApp.storage.getItem("haulz_auth_password");
+            if (login && password) {
+                // Try validating via API
+                fetch("/api/perevozki", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        login,
+                        password,
+                        dateFrom: "",
+                        dateTo: ""
+                    })
+                })
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (data) {
+                        setAuth({ login, password });
+                        const tab = WebApp.storage.getItem("haulz_last_tab");
+                        setActiveTab(tab || "home");
+                    } else {
+                        // invalid session -> show login form
+                        WebApp.storage.removeItem("haulz_auth");
+                        WebApp.storage.removeItem("haulz_auth_login");
+                        WebApp.storage.removeItem("haulz_auth_password");
+                    }
+                })
             }
         }
     }, []);
-
-    // --- PERSIST LAST ACTIVE TAB IN TELEGRAM STORAGE ---
+// --- PERSIST LAST ACTIVE TAB IN TELEGRAM STORAGE ---
     useEffect(() => {
         if (!isTg()) return;
         if (auth) {
