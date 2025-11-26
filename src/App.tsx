@@ -164,13 +164,14 @@ function HomePage() {
         <div className="home-page">
             <div className="stats-header">
                 <button
-                    className={\`filter-level \${filterLevel === 1 ? "active" : ""}\`}
+                    className={`filter-level ${filterLevel === 1 ? "active" : ""}`}
                     onClick={() => handleFilterLevelChange(1)}
                 >
                     1 уровень
                 </button>
+
                 <button
-                    className={\`filter-level \${filterLevel === 2 ? "active" : ""}\`}
+                    className={`filter-level ${filterLevel === 2 ? "active" : ""}`}
                     onClick={() => handleFilterLevelChange(2)}
                 >
                     2 уровень
@@ -182,7 +183,7 @@ function HomePage() {
                     {Object.keys(statsData.level2).map((filter) => (
                         <button
                             key={filter}
-                            className={\`filter-btn \${filter === currentFilter ? "active" : ""}\`}
+                            className={`filter-btn ${filter === currentFilter ? "active" : ""}`}
                             onClick={() => handleFilterClick(filter)}
                         >
                             {filter}
