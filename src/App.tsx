@@ -11,6 +11,45 @@ import WebApp from "@twa-dev/sdk";
 
 const isTg = () => typeof window !== "undefined" && window.Telegram?.WebApp;
 
+// --- TELEGRAM STORAGE HELPERS (НОВЫЙ БЛОК ДЛЯ АВТОРИЗАЦИИ) ---
+const AUTH_STORAGE_KEY = "authData";
+
+const loadAuth = (): AuthData | null => {
+    if (isTg()) {
+        // Получаем данные из хранилища Telegram
+        const stored = WebApp.Storage.getItem(AUTH_STORAGE_KEY);
+        if (stored) {
+            try {
+                return JSON.parse(stored);
+            } catch (e) {
+                console.error("Error parsing stored auth data:", e);
+                return null;
+            }
+        }
+    }
+    return null;
+};
+
+const saveAuth = (authData: AuthData) => {
+    if (isTg()) {
+        try {
+            // Сохраняем данные в хранилище Telegram
+            WebApp.Storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authData));
+        } catch (e) {
+            console.error("Error saving auth data:", e);
+        }
+    }
+};
+
+const clearAuth = () => {
+    if (isTg()) {
+        // Удаляем данные из хранилища Telegram
+        WebApp.Storage.removeItem(AUTH_STORAGE_KEY);
+    }
+};
+// --- КОНЕЦ TELEGRAM STORAGE HELPERS ---
+
+
 import { DOCUMENT_METHODS } from "./documentMethods";
 
 
@@ -292,306 +331,353 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
                     </div>
                 ))}
             </div>
-
             {selectedCargo && <CargoDetailsModal item={selectedCargo} isOpen={!!selectedCargo} onClose={() => setSelectedCargo(null)} auth={auth} />}
-            <FilterDialog isOpen={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} dateFrom={customDateFrom} dateTo={customDateTo} onApply={(f, t) => { setCustomDateFrom(f); setCustomDateTo(t); }} />
+            <FilterDialog 
+                isOpen={isCustomModalOpen} 
+                onClose={() => setIsCustomModalOpen(false)} 
+                dateFrom={customDateFrom} 
+                dateTo={customDateTo} 
+                onApply={(f, t) => { setCustomDateFrom(f); setCustomDateTo(t); }} 
+            />
+        </div>
+    );
+}
+
+// --- CARGO DETAILS MODAL ---
+function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, isOpen: boolean, onClose: () => void, auth: AuthData }) {
+    const [downloading, setDownloading] = useState<string | null>(null);
+    const [downloadError, setDownloadError] = useState<string | null>(null);
+
+    const handleDownload = useCallback(async (docType: string) => {
+        setDownloading(docType);
+        setDownloadError(null);
+        try {
+            const method = DOCUMENT_METHODS[docType];
+            if (!method) throw new Error(`Неизвестный тип документа: ${docType}`);
+
+            // 1. Запрос на бэкенд для получения ссылки/файла
+            const res = await fetch(PROXY_API_DOWNLOAD_URL, { 
+                method: "POST", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify({ 
+                    login: auth.login, 
+                    password: auth.password, 
+                    number: item.Number,
+                    method: method
+                }) 
+            });
+            
+            if (!res.ok) throw new Error(`Ошибка API: ${res.statusText}`);
+
+            // 2. Обработка ответа
+            const contentType = res.headers.get('Content-Type');
+            if (contentType && (contentType.includes('application/json') || contentType.includes('text/plain'))) {
+                 // Если это JSON (возможно, ошибка или ссылка)
+                const data = await res.json();
+                if (data.url) {
+                    WebApp.openLink(data.url);
+                } else if (data.error) {
+                    throw new Error(data.error);
+                } else {
+                    throw new Error("Неизвестный формат ответа API.");
+                }
+            } else {
+                // Предполагаем, что это файл (PDF)
+                const blob = await res.blob();
+                const fileURL = window.URL.createObjectURL(blob);
+                
+                if (isTg()) {
+                    // В Telegram Mini App открываем ссылку
+                    WebApp.openLink(fileURL); 
+                } else {
+                    // В браузере: создаем ссылку и кликаем
+                    const link = document.createElement('a');
+                    link.href = fileURL;
+                    link.setAttribute('download', `${item.Number}_${docType}.pdf`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+                window.URL.revokeObjectURL(fileURL);
+            }
+        } catch (e: any) {
+            setDownloadError(`Ошибка загрузки: ${e.message}`);
+        } finally {
+            setDownloading(null);
+        }
+    }, [item, auth]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content-cargo" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3>Детали груза №{item.Number}</h3>
+                    <button className="modal-close-button" onClick={onClose}><X size={20} /></button>
+                </div>
+
+                {downloadError && <div className="login-error mb-4"><AlertTriangle className="w-5 h-5 mr-2"/>{downloadError}</div>}
+
+                <div className="document-buttons">
+                    {Object.keys(DOCUMENT_METHODS).map(docType => (
+                        <button 
+                            key={docType}
+                            className="doc-button"
+                            onClick={() => handleDownload(docType)}
+                            disabled={!!downloading}
+                        >
+                            {downloading === docType ? <Loader2 className="animate-spin w-4 h-4" /> : <Download className="w-4 h-4 mr-1"/>}
+                            {docType}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="details-grid-modal">
+                    {/* Первая колонка */}
+                    <DetailItem label="Дата прихода" value={formatDate(item.DatePrih)} icon={Calendar} />
+                    <DetailItem label="Дата доставки" value={formatDate(item.DateVr)} icon={Calendar} highlighted={!!item.DateVr} />
+                    
+                    {/* Вторая колонка */}
+                    <DetailItem label="Статус" value={item.State} icon={Tag} statusClass={getStatusClass(item.State)} />
+                    <DetailItem label="Статус счета" value={item.StateBill || '-'} icon={List} />
+                    
+                    {/* Параметры */}
+                    <DetailItem label="Мест" value={item.Mest} unit="шт" icon={Layers} />
+                    <DetailItem label="Плат. вес" value={item.PW} unit="кг" icon={Scale} />
+                    <DetailItem label="Общий вес" value={item.W} unit="кг" icon={Weight} />
+                    <DetailItem label="Объем" value={item.Value} unit="м³" icon={Maximize} />
+                </div>
+                
+                {/* Сумма отдельной строкой */}
+                <div className="cargo-footer" style={{padding: '0.75rem 0', marginTop: '1rem', borderTop: '1px solid var(--color-border)'}}>
+                    <span className="sum-label">Сумма к оплате</span>
+                    <span className="sum-value" style={{fontSize: '1.25rem', fontWeight: 700}}>{formatCurrency(item.Sum)}</span>
+                </div>
+
+                {/* Дополнительные данные */}
+                <div className="details-grid-modal" style={{marginTop: '1.5rem'}}>
+                     <DetailItem label="Отправитель" value={item.Sender} icon={UserIcon} fullWidth={true} />
+                </div>
+            </div>
         </div>
     );
 }
 
 // --- SHARED COMPONENTS ---
-
 function FilterDialog({ isOpen, onClose, dateFrom, dateTo, onApply }: { isOpen: boolean; onClose: () => void; dateFrom: string; dateTo: string; onApply: (from: string, to: string) => void; }) {
     const [tempFrom, setTempFrom] = useState(dateFrom);
     const [tempTo, setTempTo] = useState(dateTo);
-    useEffect(() => { if (isOpen) { setTempFrom(dateFrom); setTempTo(dateTo); } }, [isOpen, dateFrom, dateTo]);
+
+    useEffect(() => {
+        if (isOpen) {
+            setTempFrom(dateFrom);
+            setTempTo(dateTo);
+        }
+    }, [isOpen, dateFrom, dateTo]);
+
     if (!isOpen) return null;
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
                 <div className="modal-header"><h3>Произвольный диапазон</h3><button className="modal-close-button" onClick={onClose}><X size={20} /></button></div>
                 <form onSubmit={e => { e.preventDefault(); onApply(tempFrom, tempTo); onClose(); }}>
                     <div style={{marginBottom: '1rem'}}><label className="detail-item-label">Дата начала:</label><input type="date" className="login-input date-input" value={tempFrom} onChange={e => setTempFrom(e.target.value)} required /></div>
-                    <div style={{marginBottom: '1.5rem'}}><label className="detail-item-label">Дата окончания:</label><input type="date" className="login-input date-input" value={tempTo} onChange={e => setTempTo(e.target.value)} required /></div>
-                    <button className="button-primary" type="submit">Применить</button>
+                    <div style={{marginBottom: '1rem'}}><label className="detail-item-label">Дата окончания:</label><input type="date" className="login-input date-input" value={tempTo} onChange={e => setTempTo(e.target.value)} required /></div>
+                    <div className="modal-button-container"><button type="submit" className="login-button">Применить</button></div>
                 </form>
             </div>
         </div>
     );
 }
 
-function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, isOpen: boolean, onClose: () => void, auth: AuthData }) {
-    const [downloading, setDownloading] = useState<string | null>(null);
-    const [downloadError, setDownloadError] = useState<string | null>(null);
-    if (!isOpen) return null;
 
-    const renderValue = (val: any, unit = '') => {
-        // Улучшенная проверка на пустоту: проверяем на undefined, null и строку, 
-        // которая после обрезки пробелов становится пустой.
-        if (val === undefined || val === null || (typeof val === 'string' && val.trim() === "")) return '-';
-        
-        // Обработка сложных объектов/массивов
-        if (typeof val === 'object' && val !== null && !React.isValidElement(val)) {
-            try {
-                if (Object.keys(val).length === 0) return '-';
-                return <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.75rem', margin: 0}}>{JSON.stringify(val, null, 2)}</pre>;
-            } catch (e) {
-                return String(val); 
-            }
-        }
-        
-        const num = typeof val === 'string' ? parseFloat(val) : val;
-        // Форматирование чисел
-        if (typeof num === 'number' && !isNaN(num)) {
-            if (unit.toLowerCase() === 'кг' || unit.toLowerCase() === 'м³') {
-                 // Округляем до двух знаков для кг и м³
-                return `${num.toFixed(2)}${unit ? ' ' + unit : ''}`;
-            }
-        }
-        
-        return `${val}${unit ? ' ' + unit : ''}`;
-    };
-    
-    const handleDownload = async (docType: string) => {
-        if (!item.Number) return alert("Нет номера перевозки");
-        setDownloading(docType); setDownloadError(null);
-        try {
-            const res = await fetch(PROXY_API_DOWNLOAD_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: auth.login, password: auth.password, metod: DOCUMENT_METHODS[docType], number: item.Number }) });
-            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
-            const data = await res.json();
+type DetailItemProps = {
+    label: string;
+    value: string | number | undefined;
+    icon: React.ElementType;
+    unit?: string;
+    highlighted?: boolean;
+    fullWidth?: boolean;
+    statusClass?: string;
+};
 
-if (!data?.data || !data.name) {
-    throw new Error("Ответ от сервера не содержит файл.");
-}
-
-// Декодируем base64 в бинарный файл
-const byteCharacters = atob(data.data);
-const byteNumbers = new Array(byteCharacters.length).fill(0).map((_, i) => byteCharacters.charCodeAt(i));
-const byteArray = new Uint8Array(byteNumbers);
-const blob = new Blob([byteArray], { type: "application/pdf" });
-
-const url = URL.createObjectURL(blob);
-const a = document.createElement("a");
-a.href = url;
-a.download = data.name || `${docType}_${item.Number}.pdf`;
-document.body.appendChild(a);
-a.click();
-document.body.removeChild(a);
-        } catch (e: any) { setDownloadError(e.message); } finally { setDownloading(null); }
-    };
-
-    // Список явно отображаемых полей (из API примера)
-    const EXCLUDED_KEYS = ['Number', 'DatePrih', 'DateVr', 'State', 'Mest', 'PW', 'W', 'Value', 'Sum', 'StateBill', 'Sender'];
-
+function DetailItem({ label, value, icon: Icon, unit, highlighted, fullWidth, statusClass }: DetailItemProps) {
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    {/* Заголовок без "Перевозка" */}
-                    <button className="modal-close-button" onClick={onClose}><X size={20} /></button>
-                </div>
-                {downloadError && <p className="login-error mb-2">{downloadError}</p>}
-                
-                {/* Явно отображаемые поля (из API примера) */}
-                <div className="details-grid-modal">
-                    <DetailItem label="Номер" value={item.Number} />
-                    <DetailItem label="Статус" value={item.State} statusClass={getStatusClass(item.State)} />
-                    <DetailItem label="Приход" value={formatDate(item.DatePrih)} />
-                    <DetailItem label="Доставка" value={formatDate(item.DateVr)} /> {/* Используем DateVr */}
-                    <DetailItem label="Отправитель" value={item.Sender || '-'} /> {/* Добавляем Sender */}
-                    <DetailItem label="Мест" value={renderValue(item.Mest)} icon={<Layers className="w-4 h-4 mr-1 text-theme-primary"/>} />
-                    <DetailItem label="Плат. вес" value={renderValue(item.PW, 'кг')} icon={<Scale className="w-4 h-4 mr-1 text-theme-primary"/>} highlighted /> {/* Используем PW */}
-                    <DetailItem label="Вес" value={renderValue(item.W, 'кг')} icon={<Weight className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Используем W */}
-                    <DetailItem label="Объем" value={renderValue(item.Value, 'м³')} icon={<List className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Используем Value */}
-                    <DetailItem label="Стоимость" value={formatCurrency(item.Sum)} icon={<RussianRuble className="w-4 h-4 mr-1 text-theme-primary"/>} />
-                    <DetailItem label="Статус Счета" value={item.StateBill || '-'} highlighted /> {/* Используем StateBill */}
-                </div>
-                
-                {/* ДОПОЛНИТЕЛЬНЫЕ поля из API - УДАЛЕН ЗАГОЛОВОК "Прочие данные из API" */}
-                
-                <div className="details-grid-modal">
-                    {Object.entries(item)
-                        .filter(([key]) => !EXCLUDED_KEYS.includes(key))
-                        .map(([key, val]) => {
-                            // Пропускаем, если значение пустое
-                            if (val === undefined || val === null || val === "" || (typeof val === 'string' && val.trim() === "") || (typeof val === 'object' && val !== null && Object.keys(val).length === 0)) return null; 
-                            // Пропускаем, если значение - 0
-                            if (val === 0 && key.toLowerCase().includes('date') === false) return null;
-                            
-                            return <DetailItem key={key} label={key} value={renderValue(val)} />;
-                        })}
-                </div>
-                
-                <h4 style={{marginTop: '1rem', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 600}}>Документы</h4>
-                <div className="document-buttons">
-                    {['ЭР', 'АПП', 'СЧЕТ', 'УПД'].map(doc => (
-                        <button key={doc} className="doc-button" onClick={() => handleDownload(doc)} disabled={downloading === doc}>
-                            {downloading === doc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 mr-2" />} {doc}
-                        </button>
-                    ))}
-                </div>
+        <div className={`details-item-modal ${highlighted ? 'highlighted-detail' : ''}`} style={{ gridColumn: fullWidth ? 'span 2' : 'span 1' }}>
+            <div className="flex items-center text-theme-secondary mb-1">
+                <Icon className="w-4 h-4 mr-2" />
+                <span className="text-xs">{label}</span>
             </div>
+            <div className={`font-semibold ${statusClass || ''}`}>{value === undefined || value === null || value === "" ? '-' : value} {unit && <span className="text-xs font-normal opacity-80">{unit}</span>}</div>
         </div>
     );
 }
 
-const DetailItem = ({ label, value, icon, statusClass, highlighted }: any) => (
-    <div className={`details-item-modal ${highlighted ? 'highlighted-detail' : ''}`}>
-        <div className="detail-item-label">{label}</div>
-        <div className={`detail-item-value flex items-center ${statusClass || ''}`}>{icon} {value}</div>
-    </div>
-);
-
-function StubPage({ title }: { title: string }) { return <div className="w-full p-8 text-center"><h2 className="title">{title}</h2><p className="subtitle">Раздел в разработке</p></div>; }
-
-function TabBar({ active, onChange }: { active: Tab, onChange: (t: Tab) => void }) {
+function StubPage({ title }: { title: string }) {
     return (
-        <div className="tabbar-container">
-            <TabBtn label="Главная" icon={<Home />} active={active === "home"} onClick={() => onChange("home")} />
-            <TabBtn label="" icon={<Truck />} active={active === "cargo"} onClick={() => onChange("cargo")} />
-            <TabBtn label="Документы" icon={<FileText />} active={active === "docs"} onClick={() => onChange("docs")} />
-            <TabBtn label="Поддержка" icon={<MessageCircle />} active={active === "support"} onClick={() => onChange("support")} />
-            <TabBtn label="Профиль" icon={<User />} active={active === "profile"} onClick={() => onChange("profile")} />
+        <div className="w-full max-w-lg text-center py-20">
+            <h2 className="title text-theme-secondary mb-4">{title}</h2>
+            <p className="text-theme-secondary opacity-70">Страница в разработке.</p>
         </div>
     );
 }
-const TabBtn = ({ label, icon, active, onClick }: any) => (
-    <button className={`tab-button ${active ? 'active' : ''}`} onClick={onClick}>
-        <span className="tab-icon">{icon}</span>{label && <span className="tab-label">{label}</span>}
-    </button>
-);
 
-// ----------------- MAIN APP -----------------
 
-export default function App() {
-    // --- Telegram Init ---
-    useEffect(() => {
-        if (!isTg()) return;
+// --- AUTHENTICATION & APP SHELL ---
+function LoginForm({ onSubmit, loading, error }: { onSubmit: (e: FormEvent<HTMLFormElement>, login: string, password: string) => void, loading: boolean, error: string | null }) {
+    const [login, setLogin] = useState("");
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
 
-        WebApp.ready();
-        WebApp.expand();
-        setTheme(WebApp.colorScheme);
-
-        const themeHandler = () => setTheme(WebApp.colorScheme);
-        WebApp.onEvent("themeChanged", themeHandler);
-
-        return () => WebApp.offEvent("themeChanged", themeHandler);
-    }, []);
-
-    const [auth, setAuth] = useState<AuthData | null>(null);
-    const [activeTab, setActiveTab] = useState<Tab>("cargo"); 
-    const [theme, setTheme] = useState('dark'); 
-    
-    // ИНИЦИАЛИЗАЦИЯ ПУСТЫМИ СТРОКАМИ (данные берутся с фронта)
-    const [login, setLogin] = useState(""); 
-    const [password, setPassword] = useState(""); 
-    
-    const [agreeOffer, setAgreeOffer] = useState(true);
-    const [agreePersonal, setAgreePersonal] = useState(true);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [showPassword, setShowPassword] = useState(false); 
-    
-    const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-    const [searchText, setSearchText] = useState('');
-
-    useEffect(() => { document.body.className = `${theme}-mode`; }, [theme]);
-    const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-    const handleSearch = (text: string) => setSearchText(text.toLowerCase().trim());
-
-    const handleLoginSubmit = async (e: FormEvent) => {
+    const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        setError(null);
-        if (!login || !password) return setError("Введите логин и пароль");
-        if (!agreeOffer || !agreePersonal) return setError("Подтвердите согласие с условиями");
+        onSubmit(e, login, password);
+    };
+
+    return (
+        <div className="login-container">
+            <h1 className="text-2xl font-bold mb-6 text-center text-theme-primary">Вход в систему</h1>
+            {error && <div className="login-error"><AlertTriangle className="w-5 h-5 mr-2"/>{error}</div>}
+            <form onSubmit={handleSubmit} className="login-form">
+                <input
+                    type="text"
+                    placeholder="Логин"
+                    className="login-input"
+                    value={login}
+                    onChange={(e) => setLogin(e.target.value)}
+                    required
+                    disabled={loading}
+                />
+                <div className="password-input-wrapper">
+                    <input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Пароль"
+                        className="login-input"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        disabled={loading}
+                    />
+                    <button type="button" className="show-password-button" onClick={() => setShowPassword(!showPassword)} disabled={loading}>
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                </div>
+                <button type="submit" className="login-button" disabled={loading}>
+                    {loading ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : <LogOut className="w-5 h-5 mr-2" />}
+                    {loading ? "Вход..." : "Войти"}
+                </button>
+            </form>
+        </div>
+    );
+}
+
+function App() {
+    // 1. STATE (Инициализация изменена для автологина)
+    const initialAuth = useMemo(() => loadAuth(), []); // Загрузка данных при старте
+    const [auth, setAuth] = useState<AuthData | null>(initialAuth); // Установка начального состояния
+    const [loginLoading, setLoginLoading] = useState(false);
+    const [loginError, setLoginError] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<Tab>("home");
+    const [searchText, setSearchText] = useState("");
+    const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+    const [isDarkTheme, setIsDarkTheme] = useState(true);
+
+    // 2. SIDE EFFECTS (Тема)
+    useEffect(() => {
+        document.body.className = isDarkTheme ? 'dark' : 'light';
+        // Устанавливаем тему для Telegram WebApp, если доступно
+        if (isTg()) {
+            WebApp.setMainButtonParams({ 
+                text: "", 
+                is_visible: false 
+            });
+            WebApp.setHeaderColor(isDarkTheme ? '#374151' : '#ffffff');
+            WebApp.setBackgroundColor(isDarkTheme ? '#1f2937' : '#f3f4f6');
+            WebApp.ready();
+        }
+    }, [isDarkTheme]);
+
+    // 3. HANDLERS
+    const handleLoginSubmit = useCallback(async (e: FormEvent<HTMLFormElement>, login: string, password: string) => {
+        e.preventDefault();
+        setLoginLoading(true);
+        setLoginError(null);
 
         try {
-            setLoading(true);
-            const { dateFrom, dateTo } = getDateRange("all");
+            // Простой запрос к API для проверки
             const res = await fetch(PROXY_API_BASE_URL, {
-                method: "POST", 
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ login, password, dateFrom, dateTo }),
+                body: JSON.stringify({ login, password, dateFrom: DEFAULT_DATE_FROM, dateTo: DEFAULT_DATE_TO }),
             });
 
-            if (!res.ok) {
-                let message = `Ошибка авторизации: ${res.status}`;
-                try {
-                    const errorData = await res.json() as ApiError;
-                    if (errorData.error) message = errorData.error;
-                } catch { }
-                setError(message);
-                return;
+            // Проверка статуса ответа
+            if (res.status === 401) {
+                throw new Error("Неверный логин или пароль.");
             }
-            setAuth({ login, password });
-            setActiveTab("cargo"); 
-        } catch (err: any) {
-            setError("Ошибка сети.");
+            if (!res.ok) {
+                throw new Error("Ошибка сервера. Попробуйте позже.");
+            }
+
+            const data = await res.json();
+            
+            // Предполагаем, что успешный ответ - это массив данных, а не { success: true }
+            const isSuccess = Array.isArray(data) || (data.items && Array.isArray(data.items));
+
+            if (isSuccess) {
+                const authData = { login, password };
+                setAuth(authData);
+                saveAuth(authData); // *** СОХРАНЕНИЕ В TELEGRAM.WEBAPP.STORAGE ***
+                setLoginError(null);
+            } else {
+                 // Если API вернул 200, но не данные (например, { error: 'Неизвестная ошибка' })
+                 throw new Error(data.error || "Ошибка при получении данных. Проверьте учетные данные.");
+            }
+
+        } catch (e: any) {
+            setLoginError(e.message || "Неизвестная ошибка при входе.");
+            clearAuth(); // Очистка на случай, если сохраненные данные стали недействительными
         } finally {
-            setLoading(false);
+            setLoginLoading(false);
+        }
+    }, []);
+
+    const handleLogout = useCallback(() => {
+        clearAuth(); // *** УДАЛЕНИЕ ИЗ TELEGRAM.WEBAPP.STORAGE ***
+        setAuth(null);
+        setActiveTab("home");
+        setSearchText("");
+        setIsSearchExpanded(false);
+        setLoginError(null);
+    }, []);
+
+    const handleSearch = (text: string) => {
+        // Логика поиска уже реализована внутри CargoPage, тут только передаем текст
+        setSearchText(text);
+        // При переключении на поиск, переключаем вкладку на "Грузы", если не там
+        if (text.length > 0 && activeTab !== 'cargo') {
+             setActiveTab('cargo');
         }
     };
 
-    const handleLogout = () => {
-        setAuth(null);
-        setActiveTab("cargo");
-        setPassword(""); 
-        setIsSearchExpanded(false); setSearchText('');
-    }
-
+    // 4. RENDER
     if (!auth) {
-        return (
-            <div className={`app-container login-form-wrapper`}>
-                <div className="login-card">
-                    <div className="absolute top-4 right-4">
-                        <button className="theme-toggle-button-login" onClick={toggleTheme} title={theme === 'dark' ? 'Светлый режим' : 'Темный режим'}>
-                            {/* ИСПРАВЛЕНИЕ: Убран class text-yellow-400 */}
-                            {theme === 'dark' 
-                                ? <Sun className="w-5 h-5" /> 
-                                : <Moon className="w-5 h-5" />}
-                        </button>
-                    </div>
-                    <div className="flex justify-center mb-4 h-10 mt-6"><div className="logo-text">HAULZ</div></div>
-                    <div className="tagline">Доставка грузов в Калининград и обратно</div>
-                    <form onSubmit={handleLoginSubmit} className="form">
-                        <div className="field">
-                            <input className="login-input" type="text" placeholder="Логин (email)" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" />
-                        </div>
-                        <div className="field">
-                            <div className="password-input-container">
-                                <input className="login-input password" type={showPassword ? "text" : "password"} placeholder="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" style={{paddingRight: '3rem'}} />
-                                <button type="button" className="toggle-password-visibility" onClick={() => setShowPassword(!showPassword)}>
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                </button>
-                            </div>
-                        </div>
-                        {/* ТУМБЛЕРЫ ВОССТАНОВЛЕНЫ */}
-                        <label className="checkbox-row switch-wrapper">
-                            <span>Согласие с <a href="#">публичной офертой</a></span>
-                            <div className={`switch-container ${agreeOffer ? 'checked' : ''}`} onClick={() => setAgreeOffer(!agreeOffer)}><div className="switch-knob"></div></div>
-                        </label>
-                        <label className="checkbox-row switch-wrapper">
-                            <span>Согласие на <a href="#">обработку данных</a></span>
-                            <div className={`switch-container ${agreePersonal ? 'checked' : ''}`} onClick={() => setAgreePersonal(!agreePersonal)}><div className="switch-knob"></div></div>
-                        </label>
-                        <button className="button-primary" type="submit" disabled={loading}>
-                            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : "Подтвердить"}
-                        </button>
-                    </form>
-                    {error && <p className="login-error mt-4"><AlertTriangle className="w-5 h-5 mr-2" />{error}</p>}
-                </div>
-            </div>
-        );
+        return <LoginForm onSubmit={handleLoginSubmit} loading={loginLoading} error={loginError} />;
     }
 
     return (
-        <div className={`app-container`}>
-            <header className="app-header">
-                <div className="header-top-row">
-                    <div className="header-auth-info"><UserIcon className="w-4 h-4 mr-2" /><span>{auth.login}</span></div>
-                    <div className="flex items-center space-x-3">
-                        <button className="search-toggle-button" onClick={() => { setIsSearchExpanded(!isSearchExpanded); if(isSearchExpanded) { handleSearch(''); setSearchText(''); } }}>
+        <div className="app-container">
+             <header className="app-header">
+                <div className="header-top">
+                    <h1 className="text-lg font-bold">Личный кабинет</h1>
+                    <div className="header-buttons">
+                        <button className="search-toggle-button" onClick={() => setIsSearchExpanded(!isSearchExpanded)} title="Поиск">
                             {isSearchExpanded ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
+                        </button>
+                        <button className="search-toggle-button" onClick={() => setIsDarkTheme(!isDarkTheme)} title="Смена темы">
+                            {isDarkTheme ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                         </button>
                         <button className="search-toggle-button" onClick={handleLogout} title="Выход">
                             <LogOut className="w-5 h-5" />
@@ -617,3 +703,64 @@ export default function App() {
         </div>
     );
 }
+
+// --- TABBAR COMPONENT ---
+function TabBar({ active, onChange }: { active: Tab, onChange: (tab: Tab) => void }) {
+    return (
+        <div className="tabbar-container">
+            <TabButton
+                label="Главная"
+                icon={<Home className="w-5 h-5" />}
+                active={active === "home"}
+                onClick={() => onChange("home")}
+            />
+            <TabButton
+                label="Грузы"
+                icon={<Truck className="w-5 h-5" />}
+                active={active === "cargo"}
+                onClick={() => onChange("cargo")}
+            />
+            <TabButton
+                label="Документы"
+                icon={<FileText className="w-5 h-5" />}
+                active={active === "docs"}
+                onClick={() => onChange("docs")}
+            />
+            <TabButton
+                label="Поддержка"
+                icon={<MessageCircle className="w-5 h-5" />}
+                active={active === "support"}
+                onClick={() => onChange("support")}
+            />
+            <TabButton
+                label="Профиль"
+                icon={<User className="w-5 h-5" />}
+                active={active === "profile"}
+                onClick={() => onChange("profile")}
+            />
+        </div>
+    );
+}
+
+type TabButtonProps = {
+    label: string;
+    icon: React.ReactNode;
+    active: boolean;
+    onClick: () => void;
+};
+
+function TabButton({ label, icon, active, onClick }: TabButtonProps) {
+    return (
+        <button
+            type="button"
+            className={`tab-button ${active ? 'active' : ''}`}
+            onClick={onClick}
+        >
+            <span className="tab-icon">{icon}</span>
+            <span className="tab-label">{label}</span>
+        </button>
+    );
+}
+//... (конец файла)
+
+export default App;
