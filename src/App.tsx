@@ -9,17 +9,13 @@ import "./styles.css";
 // --- TELEGRAM MINI APP SUPPORT ---
 import WebApp from "@twa-dev/sdk";
 
-const isTg = () => typeof window !== "undefined" && window.Telegram?.WebApp;
-
-import { DOCUMENT_METHODS } from "./documentMethods";
-
-
-// --- CONFIGURATION ---
-const PROXY_API_BASE_URL = '/api/perevozki'; 
-const PROXY_API_DOWNLOAD_URL = '/api/download'; 
-
-// --- TYPES ---
-type ApiError = { error?: string; [key: string]: unknown; };
+const isTg = () => {
+    const w = window as any;
+    return (
+        w?.Telegram?.WebApp &&
+        w.Telegram.WebApp.initDataUnsafe !== undefined
+    );
+};
 type AuthData = { login: string; password: string; };
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 type DateFilter = "все" | "сегодня" | "неделя" | "месяц" | "период";
@@ -248,7 +244,18 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
         } catch (e: any) { setError(e.message); } finally { setLoading(false); }
     }, [auth]);
 
-    useEffect(() => { loadCargo(apiDateRange.dateFrom, apiDateRange.dateTo); }, [apiDateRange, loadCargo]);
+    const canUseTgStorage = () => {
+    const w = window as any;
+    const storage = w?.Telegram?.WebApp?.storage;
+    return (
+        isTg() &&
+        storage &&
+        typeof storage.getItem === "function" &&
+        typeof storage.setItem === "function"
+    );
+};
+
+useEffect(() => { loadCargo(apiDateRange.dateFrom, apiDateRange.dateTo); }, [apiDateRange, loadCargo]);
 
     // Client-side filtering
     const filteredItems = useMemo(() => {
@@ -518,13 +525,13 @@ export default function App() {
     // --- AUTO AUTH FROM TELEGRAM STORAGE ---
     useEffect(() => {
         if (!isTg()) return;
-        const savedAuth = WebApp.storage.getItem("haulz_auth");
+        const savedAuth = canUseTgStorage() && WebApp.storage.getItem("haulz_auth");
         if (savedAuth === "1") {
-            const savedLogin = WebApp.storage.getItem("haulz_auth_login");
-            const savedPassword = WebApp.storage.getItem("haulz_auth_password");
+            const savedLogin = canUseTgStorage() && WebApp.storage.getItem("haulz_auth_login");
+            const savedPassword = canUseTgStorage() && WebApp.storage.getItem("haulz_auth_password");
             if (savedLogin && savedPassword) {
                 setAuth({ login: savedLogin, password: savedPassword });
-                const savedTab = WebApp.storage.getItem("haulz_last_tab");
+                const savedTab = canUseTgStorage() && WebApp.storage.getItem("haulz_last_tab");
                 if (savedTab) {
                     setActiveTab(savedTab as Tab);
                 } else {
@@ -538,7 +545,7 @@ export default function App() {
     useEffect(() => {
         if (!isTg()) return;
         if (auth) {
-            WebApp.storage.setItem("haulz_last_tab", activeTab);
+            canUseTgStorage() && WebApp.storage.setItem("haulz_last_tab", activeTab);
         }
     }, [activeTab, auth]);
 
@@ -573,10 +580,10 @@ export default function App() {
             setAuth({ login, password });
             setActiveTab("cargo");
             if (isTg()) {
-                WebApp.storage.setItem("haulz_auth", "1");
-                WebApp.storage.setItem("haulz_auth_login", login);
-                WebApp.storage.setItem("haulz_auth_password", password);
-                WebApp.storage.setItem("haulz_last_tab", "cargo");
+                canUseTgStorage() && WebApp.storage.setItem("haulz_auth", "1");
+                canUseTgStorage() && WebApp.storage.setItem("haulz_auth_login", login);
+                canUseTgStorage() && WebApp.storage.setItem("haulz_auth_password", password);
+                canUseTgStorage() && WebApp.storage.setItem("haulz_last_tab", "cargo");
             } 
         } catch (err: any) {
             setError("Ошибка сети.");
@@ -591,10 +598,10 @@ export default function App() {
         setPassword(""); 
         setIsSearchExpanded(false); setSearchText('');
         if (isTg()) {
-            WebApp.storage.removeItem("haulz_auth");
-            WebApp.storage.removeItem("haulz_auth_login");
-            WebApp.storage.removeItem("haulz_auth_password");
-            WebApp.storage.removeItem("haulz_last_tab");
+            canUseTgStorage() && WebApp.storage.removeItem("haulz_auth");
+            canUseTgStorage() && WebApp.storage.removeItem("haulz_auth_login");
+            canUseTgStorage() && WebApp.storage.removeItem("haulz_auth_password");
+            canUseTgStorage() && WebApp.storage.removeItem("haulz_last_tab");
         }
     }
 
