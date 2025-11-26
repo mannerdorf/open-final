@@ -16,6 +16,17 @@ const isTg = () => {
         w.Telegram.WebApp.initDataUnsafe !== undefined
     );
 };
+const canUseTgStorage = () => {
+    const w = window as any;
+    const storage = w?.Telegram?.WebApp?.storage;
+    return (
+        isTg() &&
+        storage &&
+        typeof storage.getItem === "function" &&
+        typeof storage.setItem === "function"
+    );
+};
+
 type AuthData = { login: string; password: string; };
 type Tab = "home" | "cargo" | "docs" | "support" | "profile";
 type DateFilter = "все" | "сегодня" | "неделя" | "месяц" | "период";
@@ -243,18 +254,6 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
             })));
         } catch (e: any) { setError(e.message); } finally { setLoading(false); }
     }, [auth]);
-
-    const canUseTgStorage = () => {
-    const w = window as any;
-    const storage = w?.Telegram?.WebApp?.storage;
-    return (
-        isTg() &&
-        storage &&
-        typeof storage.getItem === "function" &&
-        typeof storage.setItem === "function"
-    );
-};
-
 useEffect(() => { loadCargo(apiDateRange.dateFrom, apiDateRange.dateTo); }, [apiDateRange, loadCargo]);
 
     // Client-side filtering
