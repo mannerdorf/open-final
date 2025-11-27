@@ -1,378 +1,950 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+import { FormEvent, useEffect, useState, useCallback, useMemo } from "react";
+// Импортируем все необходимые иконки
+import { 
+    LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff, AlertTriangle, Package, Calendar, Tag, Layers, Weight, Filter, Search, ChevronDown, User as UserIcon, Scale, RussianRuble, List, Download, FileText as FileTextIcon, Send, 
+    LayoutGrid, Maximize, TrendingUp, CornerUpLeft, ClipboardCheck, CreditCard, Minus 
+} from 'lucide-react';
+import React from "react";
+import "./styles.css";
+// --- TELEGRAM MINI APP SUPPORT ---
+import WebApp from "@twa-dev/sdk";
 
-* { box-sizing: border-box; }
-body { margin: 0; font-family: 'Inter', sans-serif; }
+const isTg = () => typeof window !== "undefined" && window.Telegram?.WebApp;
 
-/* --- THEME VARIABLES --- */
-:root {
-    --color-bg-primary: #1f2937; /* gray-900 - Фон страницы */
-    --color-bg-secondary: #374151; /* gray-800 - Фон шапки */
-    --color-bg-card: #374151; /* gray-800 - Фон карточек/модалов */
-    --color-bg-hover: #4b5563; /* gray-600 */
-    --color-bg-input: #4b5563; /* gray-600 */
-    --color-text-primary: #e5e7eb; /* gray-100 */
-    --color-text-secondary: #9ca3af; /* gray-400 */
-    --color-border: #4b5563; /* gray-600 */
-    --color-primary-blue: #3b82f6;
-    --color-tumbler-bg-off: #6b7280; /* gray-500 */
-    --color-tumbler-bg-on: #3b82f6; /* blue-500 */
-    --color-tumbler-knob: white;
-    --color-error-bg: rgba(185, 28, 28, 0.1); --color-error-border: #b91c1c; --color-error-text: #fca5a5;
-    --color-success-status: #34d399; /* emerald-400 */
-    --color-pending-status: #facc15; /* yellow-400 */
-    --color-modal-bg: rgba(31, 41, 55, 0.9);
-    --color-transit-status: #f97316; /* orange-600 */
-    --color-accepted-status: #3b82f6; /* blue-500 */
-}
-.light-mode {
-    --color-bg-primary: #f9fafb; /* gray-50 */
-    --color-bg-secondary: #ffffff;
-    --color-bg-card: #ffffff;
-    --color-bg-hover: #f3f4f6; /* gray-100 */
-    --color-bg-input: #e5e7eb; /* gray-200 */
-    --color-text-primary: #1f2937; /* gray-900 */
-    --color-text-secondary: #6b7280; /* gray-500 */
-    --color-border: #d1d5db; /* gray-300 */
-    --color-tumbler-bg-off: #9ca3af; /* gray-400 */
-    --color-error-bg: rgba(254, 202, 202, 0.8);
-    --color-error-border: #ef4444;
-    --color-error-text: #b91c1c;
-    --color-modal-bg: rgba(255, 255, 255, 0.9);
-}
-
-/* --- UTILITY CLASSES --- */
-.flex { display: flex; }
-.justify-center { justify-content: center; }
-.items-center { align-items: center; }
-.mr-1 { margin-right: 0.25rem; }
-.mr-2 { margin-right: 0.5rem; }
-.mb-2 { margin-bottom: 0.5rem; }
-.mb-4 { margin-bottom: 1rem; }
-.mt-4 { margin-top: 1rem; }
-.absolute { position: absolute; }
-.top-4 { top: 1rem; }
-.right-4 { right: 1rem; }
-.w-3 { width: 0.75rem; }
-.w-4 { width: 1rem; }
-.h-4 { height: 1rem; }
-.w-5 { width: 1.25rem; }
-.h-5 { height: 1.25rem; }
-.text-yellow-400 { color: var(--color-pending-status); }
-.w-full { width: 100%; }
-.max-w-4xl { max-width: 56rem; }
-.animate-spin { animation: spin 1s linear infinite; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.text-theme-primary { color: var(--color-text-primary); }
-.text-theme-secondary { color: var(--color-text-secondary); }
-
-/* --- GENERAL LAYOUT --- */
-.app-container {
-    min-height: 100vh;
-    background-color: var(--color-bg-primary);
-    color: var(--color-text-primary);
-    padding-bottom: 4rem; /* For TabBar */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-.app-main {
-    padding: 1rem;
-    padding-top: 0;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-}
-
-/* --- HEADER --- */
-.app-header {
-    width: 100%;
-    max-width: 56rem;
-    padding: 1rem;
-    background-color: var(--color-bg-secondary);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    margin-bottom: 1rem;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-.header-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-.header-auth-info { display: flex; align-items: center; font-size: 0.9rem; color: var(--color-text-secondary); }
-
-/* --- SEARCH --- */
-.search-container {
-    display: flex;
-    align-items: center;
-    background-color: var(--color-bg-input);
-    border-radius: 0.75rem;
-    padding: 0.25rem 0.5rem;
-    transition: all 0.3s ease-in-out;
-    overflow: hidden;
-    height: 40px; /* Фиксированная высота */
-}
-.search-container.collapsed { max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0; opacity: 0; visibility: hidden; }
-.search-container.expanded { max-height: 40px; padding-top: 0.25rem; padding-bottom: 0.25rem; margin-bottom: 0.5rem; opacity: 1; visibility: visible; }
-
-.search-input {
-    flex-grow: 1;
-    background: transparent;
-    border: none;
-    color: var(--color-text-primary);
-    padding: 0 0.5rem;
-    font-size: 0.9rem;
-    outline: none;
-}
-.search-toggle-button {
-    background: none;
-    border: none;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    padding: 0.25rem;
-}
-
-/* --- LOGIN FORM --- */
-.login-form-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; width: 100%; }
-.login-card { background-color: var(--color-bg-card); width: 90%; max-width: 400px; border-radius: 1rem; padding: 1.5rem; position: relative; border: 1px solid var(--color-border); }
-.logo-text { font-size: 2rem; font-weight: 900; color: var(--color-primary-blue); }
-.tagline { text-align: center; margin-bottom: 1.5rem; color: var(--color-text-secondary); font-size: 0.9rem; }
-.form { display: flex; flex-direction: column; gap: 1rem; }
-.field { position: relative; }
-.login-input { width: 100%; padding: 0.75rem; background-color: var(--color-bg-input); border: 1px solid var(--color-border); border-radius: 0.5rem; color: var(--color-text-primary); outline: none; transition: border-color 0.3s; }
-.login-input:focus { border-color: var(--color-primary-blue); }
-.password-input-container { position: relative; }
-.toggle-password-visibility { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--color-text-secondary); cursor: pointer; }
-.checkbox-row a { color: var(--color-primary-blue); text-decoration: none; }
-.button-primary { padding: 0.75rem; background-color: var(--color-primary-blue); color: white; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background-color 0.3s; margin-top: 0.5rem; }
-.button-primary:hover:not(:disabled) { background-color: #2563eb; }
-.button-primary:disabled { background-color: #6b7280; cursor: not-allowed; }
-.login-error { display: flex; align-items: center; justify-content: center; padding: 0.75rem; border-radius: 0.5rem; background-color: var(--color-error-bg); border: 1px solid var(--color-error-border); color: var(--color-error-text); font-size: 0.9rem; margin-top: 1rem; }
-.theme-toggle-button-login { background: none; border: none; cursor: pointer; }
-
-/* --- SWITCH (TUMBLER) STYLES --- */
-.switch-wrapper {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.85rem;
-    color: var(--color-text-secondary);
-    user-select: none;
-    cursor: pointer;
-}
-
-.switch-container {
-    width: 38px;
-    height: 22px;
-    border-radius: 11px;
-    background-color: var(--color-tumbler-bg-off);
-    position: relative;
-    transition: background-color 0.3s;
-    flex-shrink: 0;
-}
-
-.switch-container.checked {
-    background-color: var(--color-tumbler-bg-on);
-}
-
-.switch-knob {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background-color: var(--color-tumbler-knob);
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    transition: transform 0.3s, background-color 0.3s;
-}
-
-.switch-container.checked .switch-knob {
-    transform: translateX(16px);
-}
-
-/* --- CARGO LIST --- */
-.cargo-list { width: 100%; }
-.cargo-card {
-    background-color: var(--color-bg-card);
-    border-radius: 1rem;
-    padding: 1rem;
-    border: 1px solid var(--color-border);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: box-shadow 0.3s, border-color 0.3s;
-    cursor: pointer;
-}
-.cargo-card:hover { box-shadow: 0 6px 10px rgba(59, 130, 246, 0.15); border-color: var(--color-primary-blue); }
-.cargo-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-.order-number { font-size: 1.1rem; font-weight: 700; color: var(--color-text-primary); }
-.date { font-size: 0.8rem; color: var(--color-text-secondary); display: flex; align-items: center; }
-.cargo-details-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--color-border);
-}
-.detail-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 0.25rem;
-    border-radius: 0.25rem;
-}
-.detail-item-label { font-size: 0.7rem; color: var(--color-text-secondary); margin-bottom: 0.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.detail-item-value { font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; }
-.cargo-footer { display: flex; justify-content: space-between; align-items: center; }
-.sum-label { font-size: 0.8rem; color: var(--color-text-secondary); }
-.sum-value { font-size: 1.2rem; font-weight: 700; color: var(--color-success-status); }
-
-/* --- STATUS BADGES --- */
-.status-value { padding: 0.2rem 0.4rem; border-radius: 0.5rem; font-size: 0.8rem; font-weight: 700; color: var(--color-text-primary); background-color: var(--color-bg-hover); }
-.status-value.success { background-color: rgba(52, 211, 153, 0.2); color: var(--color-success-status); } /* delivered, completed */
-.status-value.transit { background-color: rgba(249, 115, 22, 0.2); color: var(--color-transit-status); } /* in_transit */
-.status-value.accepted { background-color: rgba(59, 130, 246, 0.2); color: var(--color-accepted-status); } /* accepted */
-.status-value.ready { background-color: rgba(250, 204, 21, 0.2); color: var(--color-pending-status); } /* ready */
-
-/* --- FILTERS --- */
-.filters-container { display: flex; gap: 0.75rem; margin-bottom: 1rem; width: 100%; justify-content: center; }
-.filter-group { position: relative; }
-.filter-button { display: flex; align-items: center; padding: 0.5rem 0.75rem; background-color: var(--color-bg-card); color: var(--color-text-primary); border: 1px solid var(--color-border); border-radius: 0.5rem; cursor: pointer; font-size: 0.9rem; }
-.filter-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 20; background-color: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: 0.5rem; margin-top: 0.25rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden; }
-.dropdown-item { padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.9rem; }
-.dropdown-item:hover { background-color: var(--color-bg-hover); }
-
-/* --- MODAL --- */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--color-modal-bg); z-index: 50; display: flex; justify-content: center; align-items: center; padding: 1rem; }
-.modal-content { background-color: var(--color-bg-card); width: 90%; max-width: 500px; border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid var(--color-border); max-height: 90vh; overflow-y: auto; }
-.modal-header { display: flex; justify-content: space-between; margin-bottom: 1rem; font-weight: 700; font-size: 1.2rem; align-items: center; }
-.modal-close-button { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; }
-.document-buttons { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
-.doc-button { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0.5rem; background-color: var(--color-primary-blue); color: white; border-radius: 0.5rem; border: none; cursor: pointer; font-size: 0.8rem; min-width: 80px; transition: background-color 0.3s; }
-.doc-button:hover:not(:disabled) { background-color: #2563eb; }
-
-.details-grid-modal { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
-@media (max-width: 400px) { /* Делаем одноколоночную сетку на очень маленьких экранах */
-    .details-grid-modal { grid-template-columns: 1fr; }
-}
-
-.details-item-modal { padding: 0.5rem; background-color: var(--color-bg-hover); border-radius: 0.5rem; }
-.login-input.date-input { margin-bottom: 0; }
-.modal-button-container { margin-top: 1rem; }
-
-/* --- TABBAR --- */
-.tabbar-container { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; background-color: var(--color-bg-secondary); border-top: 1px solid var(--color-border); display: flex; justify-content: space-around; padding: 0.5rem 0; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1); }
-.tab-button { display: flex; flex-direction: column; align-items: center; justify-content: center; background: none; border: none; color: var(--color-text-secondary); cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 0.5rem; transition: color 0.3s; min-width: 60px; }
-.tab-button.active { color: var(--color-primary-blue); }
-.tab-icon { margin-bottom: 0.1rem; }
-.tab-label { font-size: 0.7rem; }
-
-/* --- STATS --- */
-.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
-.stat-card {
-    padding: 1rem;
-    border-radius: 0.75rem;
-    color: white;
-    cursor: pointer;
-    transition: transform 0.2s, opacity 0.2s;
-}
-.stat-card:active { transform: scale(0.98); opacity: 0.9; }
-
-/* --- EMPTY STATE --- */
-.empty-state-card {
-    background-color: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    border-radius: 1rem;
-    padding: 3rem;
-    text-align: center;
-    margin-top: 5rem;
-}
+import { DOCUMENT_METHODS } from "./documentMethods";
 
 
+// --- CONFIGURATION ---
+const PROXY_API_BASE_URL = '/api/perevozki'; 
+const PROXY_API_DOWNLOAD_URL = '/api/download'; 
 
-/* --- HOME PAGE PERIOD SELECTOR --- */
-.home-period-button {
-    width: 100%;
-    background-color: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    color: var(--color-text-primary);
-    font-size: 1rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.2s;
+// --- TYPES ---
+type ApiError = { error?: string; [key: string]: unknown; };
+type AuthData = { login: string; password: string; };
+type Tab = "home" | "cargo" | "docs" | "support" | "profile";
+type DateFilter = "все" | "сегодня" | "неделя" | "месяц" | "период";
+type StatusFilter = "all" | "accepted" | "in_transit" | "ready" | "delivering" | "delivered";
+type HomePeriodFilter = "today" | "week" | "month" | "year" | "custom";
+
+// --- ИСПОЛЬЗУЕМ ТОЛЬКО ПЕРЕМЕННЫЕ ИЗ API ---
+type CargoItem = {
+    Number?: string; DatePrih?: string; DateVr?: string; State?: string; Mest?: number | string; 
+    PW?: number | string; W?: number | string; Value?: number | string; Sum?: number | string; 
+    StateBill?: string; Sender?: string; [key: string]: any; // Для всех остальных полей
+};
+
+type CargoStat = {
+    key: string; label: string; icon: React.ElementType; value: number | string; unit: string; bgColor: string;
+};
+
+// --- CONSTANTS ---
+const getTodayDate = () => new Date().toISOString().split('T')[0];
+const getSixMonthsAgoDate = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 6); 
+    return d.toISOString().split('T')[0];
+};
+const DEFAULT_DATE_FROM = getSixMonthsAgoDate();
+const DEFAULT_DATE_TO = getTodayDate();
+
+// Статистика (заглушка)
+const STATS_LEVEL_1: CargoStat[] = [
+    { key: 'total', label: 'Всего перевозок', icon: LayoutGrid, value: 125, unit: 'шт', bgColor: 'bg-indigo-500' },
+    { key: 'payments', label: 'Счета', icon: RussianRuble, value: '1,250,000', unit: '₽', bgColor: 'bg-green-500' },
+    { key: 'weight', label: 'Вес', icon: TrendingUp, value: 5400, unit: 'кг', bgColor: 'bg-yellow-500' },
+    { key: 'volume', label: 'Объем', icon: Maximize, value: 125, unit: 'м³', bgColor: 'bg-pink-500' },
+];
+
+const STATS_LEVEL_2: { [key: string]: CargoStat[] } = {
+    total: [
+        { key: 'total_new', label: 'В работе', icon: Truck, value: 35, unit: 'шт', bgColor: 'bg-blue-400' },
+        { key: 'total_in_transit', label: 'В пути', icon: TrendingUp, value: 50, unit: 'шт', bgColor: 'bg-indigo-400' },
+        { key: 'total_completed', label: 'Завершено', icon: Check, value: 40, unit: 'шт', bgColor: 'bg-green-400' },
+        { key: 'total_cancelled', label: 'Отменено', icon: X, value: 0, unit: 'шт', bgColor: 'bg-red-400' },
+    ],
+    payments: [
+        { key: 'pay_paid', label: 'Оплачено', icon: ClipboardCheck, value: 750000, unit: '₽', bgColor: 'bg-green-400' },
+        { key: 'pay_due', label: 'К оплате', icon: CreditCard, value: 500000, unit: '₽', bgColor: 'bg-yellow-400' },
+        { key: 'pay_none', label: 'Нет счета', icon: Minus, value: 0, unit: 'шт', bgColor: 'bg-gray-400' },
+    ],
+    weight: [
+        { key: 'weight_current', label: 'Общий вес', icon: Weight, value: 5400, unit: 'кг', bgColor: 'bg-red-400' },
+        { key: 'weight_paid', label: 'Платный вес', icon: Scale, value: 4500, unit: 'кг', bgColor: 'bg-orange-400' },
+        { key: 'weight_free', label: 'Бесплатный вес', icon: Layers, value: 900, unit: 'кг', bgColor: 'bg-purple-400' },
+    ],
+    volume: [
+        { key: 'vol_current', label: 'Объем всего', icon: Maximize, value: 125, unit: 'м³', bgColor: 'bg-pink-400' },
+        { key: 'vol_boxes', label: 'Кол-во мест', icon: Layers, value: 125, unit: 'шт', bgColor: 'bg-teal-400' },
+    ],
+};
+
+
+// --- HELPERS ---
+const getDateRange = (filter: DateFilter) => {
+    const today = new Date();
+    const dateTo = getTodayDate();
+    let dateFrom = getTodayDate();
+    switch (filter) {
+        case 'all': dateFrom = getSixMonthsAgoDate(); break;
+        case 'today': dateFrom = getTodayDate(); break;
+        case 'week': today.setDate(today.getDate() - 7); dateFrom = today.toISOString().split('T')[0]; break;
+        case 'month': today.setMonth(today.getMonth() - 1); dateFrom = today.toISOString().split('T')[0]; break;
+        default: break;
+    }
+    return { dateFrom, dateTo };
 }
-.home-period-button:hover { background-color: var(--color-bg-hover); }
-.home-period-title { opacity: 0.9; }
-.home-period-value {
-    color: var(--color-primary-blue);
-    margin-left: 0.25rem;
-    font-weight: 700;
+
+const formatDate = (dateString: string | undefined): string => {
+    if (!dateString) return '-';
+    try {
+        // Убеждаемся, что строка - это только дата (без времени) для корректного парсинга
+        const cleanDateString = dateString.split('T')[0]; 
+        const date = new Date(cleanDateString);
+        if (!isNaN(date.getTime())) return date.toLocaleDateString('ru-RU');
+    } catch { }
+    return dateString;
+};
+
+const formatCurrency = (value: number | string | undefined): string => {
+    if (value === undefined || value === null || (typeof value === 'string' && value.trim() === "")) return '-';
+    const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
+    return isNaN(num) ? String(value) : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(num);
+};
+
+const getStatusClass = (status: string | undefined) => {
+    const lower = (status || '').toLowerCase();
+    if (lower.includes('доставлен') || lower.includes('заверш')) return 'status-value success';
+    if (lower.includes('пути') || lower.includes('отправлен')) return 'status-value transit';
+    if (lower.includes('принят') || lower.includes('оформлен')) return 'status-value accepted';
+    if (lower.includes('готов')) return 'status-value ready';
+    return 'status-value';
+};
+
+const getFilterKeyByStatus = (s: string | undefined): StatusFilter => { 
+    if (!s) return 'all'; 
+    const l = s.toLowerCase(); 
+    if (l.includes('доставлен') || l.includes('заверш')) return 'delivered'; 
+    if (l.includes('пути') || l.includes('отправлен')) return 'in_transit';
+    if (l.includes('принят') || l.includes('оформлен')) return 'accepted';
+    if (l.includes('готов')) return 'ready';
+    if (l.includes('доставке')) return 'delivering';
+    return 'all'; 
 }
-.period-option-button {
-    width: 100%;
-    padding: 0.8rem;
-    background-color: var(--color-bg-card);
-    border-radius: 0.5rem;
-    color: var(--color-text-primary);
-    text-align: left;
-    border: 1px solid var(--color-border);
-    font-size: 0.95rem;
-    cursor: pointer;
-    transition: background-color 0.2s;
+
+const STATUS_MAP: Record<StatusFilter, string> = { "all": "Все", "accepted": "Принят", "in_transit": "В пути", "ready": "Готов", "delivering": "На доставке", "delivered": "Доставлено" };
+
+
+// ================== COMPONENTS ==================
+
+// --- HOME PAGE (STATISTICS) ---
+
+function HomePage({ auth }: { auth: AuthData }) {
+    const [periodFilter, setPeriodFilter] = useState<HomePeriodFilter>("month");
+    const [customFrom, setCustomFrom] = useState(DEFAULT_DATE_FROM);
+    const [customTo, setCustomTo] = useState(DEFAULT_DATE_TO);
+    const [items, setItems] = useState<CargoItem[]>([]);
+    const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+    const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false);
+    const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+
+    const apiDateRange = useMemo(() => {
+        if (periodFilter === "custom") {
+            return { dateFrom: customFrom, dateTo: customTo };
+        }
+        const today = new Date();
+        const dateTo = getTodayDate();
+        let dateFrom = dateTo;
+
+        switch (periodFilter) {
+            case "today":
+                dateFrom = getTodayDate();
+                break;
+            case "week":
+                today.setDate(today.getDate() - 7);
+                dateFrom = today.toISOString().split("T")[0];
+                break;
+            case "month":
+                today.setMonth(today.getMonth() - 1);
+                dateFrom = today.toISOString().split("T")[0];
+                break;
+            case "year":
+                today.setFullYear(today.getFullYear() - 1);
+                dateFrom = today.toISOString().split("T")[0];
+                break;
+            default:
+                break;
+        }
+
+        return { dateFrom, dateTo };
+    }, [periodFilter, customFrom, customTo]);
+
+    const loadStats = useCallback(async (dateFrom: string, dateTo: string) => {
+        if (!auth) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch(PROXY_API_BASE_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    login: auth.login,
+                    password: auth.password,
+                    dateFrom,
+                    dateTo,
+                }),
+            });
+            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : (data.items || []);
+            const mapNumber = (value: any): number => {
+                if (value === null || value === undefined) return 0;
+                if (typeof value === "number") return value;
+                const parsed = parseFloat(String(value).replace(",", "."));
+                return isNaN(parsed) ? 0 : parsed;
+            };
+            setItems(
+                list.map((item: any) => ({
+                    ...item,
+                    Number: item.Number,
+                    DatePrih: item.DatePrih,
+                    DateVr: item.DateVr,
+                    State: item.State,
+                    Mest: mapNumber(item.Mest),
+                    PW: mapNumber(item.PW),
+                    W: mapNumber(item.W),
+                    Value: mapNumber(item.Value),
+                    Sum: mapNumber(item.Sum),
+                    StateBill: item.StateBill,
+                    Sender: item.Sender,
+                }))
+            );
+        } catch (e: any) {
+            setError(e.message || "Ошибка загрузки данных");
+        } finally {
+            setLoading(false);
+        }
+    }, [auth]);
+
+    useEffect(() => {
+        loadStats(apiDateRange.dateFrom, apiDateRange.dateTo);
+    }, [apiDateRange, loadStats]);
+
+    const totalShipments = items.length;
+    const totalPaidWeight = useMemo(
+        () => items.reduce((sum, item) => sum + (Number(item.PW) || 0), 0),
+        [items]
+    );
+    const totalWeight = useMemo(
+        () => items.reduce((sum, item) => sum + (Number(item.W) || 0), 0),
+        [items]
+    );
+    const totalVolume = useMemo(
+        () => items.reduce((sum, item) => sum + (Number(item.Value) || 0), 0),
+        [items]
+    );
+
+    const formatTons = (kg: number) => {
+        if (!kg) return "0 т";
+        return (kg / 1000).toFixed(1) + " т";
+    };
+
+    const periodLabel = useMemo(() => {
+        const { dateFrom, dateTo } = apiDateRange;
+        if (periodFilter === "month") {
+            const d = new Date(dateFrom);
+            if (!isNaN(d.getTime())) {
+                return d.toLocaleDateString("ru-RU", {
+                    month: "long",
+                    year: "numeric",
+                });
+            }
+        }
+        if (periodFilter === "year") {
+            const d = new Date(dateFrom);
+            if (!isNaN(d.getTime())) {
+                return d.getFullYear().toString();
+            }
+        }
+        return `${formatDate(dateFrom)} – ${formatDate(dateTo)}`;
+    }, [apiDateRange, periodFilter]);
+
+    const selectPeriod = (value: HomePeriodFilter) => {
+        setPeriodFilter(value);
+        setIsPeriodModalOpen(false);
+        if (value !== "custom") {
+            // при выборе предустановленного периода сбрасываем кастомные диапазоны к дефолту
+            setCustomFrom(DEFAULT_DATE_FROM);
+            setCustomTo(DEFAULT_DATE_TO);
+        }
+    };
+
+    return (
+        <div className="w-full max-w-lg">
+            {/* Заголовок периода */}
+            <div className="home-period-header mb-6">
+                <button
+                    className="home-period-button"
+                    onClick={() => setIsPeriodModalOpen(true)}
+                >
+                    <span className="home-period-title">
+                        Период:{" "}
+                        <span className="home-period-value">
+                            {periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)}
+                        </span>
+                    </span>
+                    <ChevronDown className="w-5 h-5 ml-2" />
+                </button>
+            </div>
+
+            {/* Карточки статистики */}
+            <div className="stats-grid">
+                <div className="stat-card">
+                    <div className="flex justify-between items-center mb-2">
+                        <Package className="w-5 h-5 text-theme-primary" />
+                        <span className="text-xs text-theme-secondary">
+                            За период
+                        </span>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                        {totalShipments}
+                    </div>
+                    <div className="text-sm text-theme-secondary mt-1">
+                        Всего перевозок
+                    </div>
+                </div>
+
+                <div className="stat-card">
+                    <div className="flex justify-between items-center mb-2">
+                        <Scale className="w-5 h-5 text-theme-primary" />
+                        <span className="text-xs text-theme-secondary">
+                            Платный вес
+                        </span>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                        {formatTons(totalPaidWeight)}
+                    </div>
+                    <div className="text-sm text-theme-secondary mt-1">
+                        Платный вес за период
+                    </div>
+                </div>
+
+                <div className="stat-card">
+                    <div className="flex justify-between items-center mb-2">
+                        <Weight className="w-5 h-5 text-theme-primary" />
+                        <span className="text-xs text-theme-secondary">Вес</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                        {formatTons(totalWeight)}
+                    </div>
+                    <div className="text-sm text-theme-secondary mt-1">
+                        Фактический вес за период
+                    </div>
+                </div>
+
+                <div className="stat-card">
+                    <div className="flex justify-between items-center mb-2">
+                        <Maximize className="w-5 h-5 text-theme-primary" />
+                        <span className="text-xs text-theme-secondary">Объем</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                        {totalVolume.toFixed(1)}м³
+                    </div>
+                    <div className="text-sm text-theme-secondary mt-1">
+                        Объем за период
+                    </div>
+                </div>
+            </div>
+
+            {/* Загрузка / ошибка */}
+            {loading && (
+                <div className="text-center py-8">
+                    <Loader2 className="animate-spin w-6 h-6 mx-auto text-theme-primary" />
+                    <p className="text-sm text-theme-secondary mt-2">
+                        Обновление данных...
+                    </p>
+                </div>
+            )}
+            {error && (
+                <div className="login-error mt-4">
+                    <AlertTriangle className="w-5 h-5 mr-2" />
+                    {error}
+                </div>
+            )}
+
+            {/* Модальное окно выбора периода */}
+            {isPeriodModalOpen && (
+                <div
+                    className="modal-overlay"
+                    onClick={() => setIsPeriodModalOpen(false)}
+                >
+                    <div
+                        className="modal-content"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="modal-header">
+                            <h3>Выбор периода</h3>
+                            <button
+                                className="modal-close-button"
+                                onClick={() => setIsPeriodModalOpen(false)}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="space-y-3">
+                            <button
+                                className="period-option-button"
+                                onClick={() => selectPeriod("week")}
+                            >
+                                Неделя
+                            </button>
+                            <button
+                                className="period-option-button"
+                                onClick={() => selectPeriod("month")}
+                            >
+                                Месяц
+                            </button>
+                            <button
+                                className="period-option-button"
+                                onClick={() => selectPeriod("year")}
+                            >
+                                Год
+                            </button>
+                            <button
+                                className="period-option-button"
+                                onClick={() => {
+                                    setIsPeriodModalOpen(false);
+                                    setIsCustomModalOpen(true);
+                                    setPeriodFilter("custom");
+                                }}
+                            >
+                                Произвольный период
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Модальное окно выбора произвольного периода */}
+            <CustomPeriodModal
+                isOpen={isCustomModalOpen}
+                onClose={() => setIsCustomModalOpen(false)}
+                dateFrom={customFrom}
+                dateTo={customTo}
+                onApply={(from, to) => {
+                    setCustomFrom(from);
+                    setCustomTo(to);
+                }}
+            />
+        </div>
+    );
 }
-.period-option-button:hover {
-    background-color: var(--color-bg-hover);
+
+function CustomPeriodModal({
+    isOpen,
+    onClose,
+    dateFrom,
+    dateTo,
+    onApply,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    dateFrom: string;
+    dateTo: string;
+    onApply: (from: string, to: string) => void;
+}) {
+    const [localFrom, setLocalFrom] = useState<string>(dateFrom);
+    const [localTo, setLocalTo] = useState<string>(dateTo);
+
+    useEffect(() => {
+        setLocalFrom(dateFrom);
+        setLocalTo(dateTo);
+    }, [dateFrom, dateTo]);
+
+    if (!isOpen) return null;
+
+    const handleApply = () => {
+        if (!localFrom || !localTo) return;
+        onApply(localFrom, localTo);
+        onClose();
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div
+                className="modal-content"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="modal-header">
+                    <h3>Произвольный период</h3>
+                    <button
+                        className="modal-close-button"
+                        onClick={onClose}
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="modal-body">
+                    <label className="modal-label">
+                        Дата с
+                        <input
+                            type="date"
+                            className="modal-input"
+                            value={localFrom}
+                            onChange={(e) => setLocalFrom(e.target.value)}
+                        />
+                    </label>
+                    <label className="modal-label">
+                        Дата по
+                        <input
+                            type="date"
+                            className="modal-input"
+                            value={localTo}
+                            onChange={(e) => setLocalTo(e.target.value)}
+                        />
+                    </label>
+                </div>
+                <div className="modal-footer">
+                    <button className="primary-button" onClick={handleApply}>
+                        Применить
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 }
-.modal-body {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+
+// --- CARGO PAGE (LIST ONLY) ---
+function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string }) {
+    const [items, setItems] = useState<CargoItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedCargo, setSelectedCargo] = useState<CargoItem | null>(null);
+    
+    // Filters State
+    const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+    const [customDateFrom, setCustomDateFrom] = useState(DEFAULT_DATE_FROM);
+    const [customDateTo, setCustomDateTo] = useState(DEFAULT_DATE_TO);
+    const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+    const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+
+    const apiDateRange = useMemo(() => dateFilter === "custom" ? { dateFrom: customDateFrom, dateTo: customDateTo } : getDateRange(dateFilter), [dateFilter, customDateFrom, customDateTo]);
+
+    // Удалена функция findDeliveryDate, используем DateVr напрямую.
+
+    const loadCargo = useCallback(async (dateFrom: string, dateTo: string) => {
+        setLoading(true); setError(null);
+        try {
+            const res = await fetch(PROXY_API_BASE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: auth.login, password: auth.password, dateFrom, dateTo }) });
+            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : data.items || [];
+            
+            // МАППИНГ ДАННЫХ: используем только указанные поля API
+            setItems(list.map((item: any) => ({
+                ...item,
+                Number: item.Number, 
+                DatePrih: item.DatePrih, 
+                DateVr: item.DateVr, // Дата доставки
+                State: item.State, 
+                Mest: item.Mest, 
+                PW: item.PW, // Платный вес
+                W: item.W, // Общий вес
+                Value: item.Value, // Объем
+                Sum: item.Sum, 
+                StateBill: item.StateBill, // Статус счета
+                Sender: item.Sender, // Отправитель
+            })));
+        } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+    }, [auth]);
+
+    useEffect(() => { loadCargo(apiDateRange.dateFrom, apiDateRange.dateTo); }, [apiDateRange, loadCargo]);
+
+    // Client-side filtering
+    const filteredItems = useMemo(() => {
+        let res = items;
+        if (statusFilter !== 'all') res = res.filter(i => getFilterKeyByStatus(i.State) === statusFilter);
+        if (searchText) {
+            const lower = searchText.toLowerCase();
+            // Обновлены поля поиска: PW вместо PV, добавлен Sender
+            res = res.filter(i => [i.Number, i.State, i.Sender, formatDate(i.DatePrih), formatCurrency(i.Sum), String(i.PW), String(i.Mest)].join(' ').toLowerCase().includes(lower));
+        }
+        return res;
+    }, [items, statusFilter, searchText]);
+
+
+    return (
+        <div className="w-full">
+            {/* Filters */}
+            <div className="filters-container">
+                <div className="filter-group">
+                    <button className="filter-button" onClick={() => { setIsDateDropdownOpen(!isDateDropdownOpen); setIsStatusDropdownOpen(false); }}>
+                        Дата: {dateFilter === 'custom' ? 'Период' : dateFilter} <ChevronDown className="w-4 h-4"/>
+                    </button>
+                    {isDateDropdownOpen && <div className="filter-dropdown">
+                        {['all', 'today', 'week', 'month', 'custom'].map(key => <div key={key} className="dropdown-item" onClick={() => { setDateFilter(key as any); setIsDateDropdownOpen(false); if(key==='custom') setIsCustomModalOpen(true); }}>{key === 'all' ? 'Все' : key === 'today' ? 'Сегодня' : key === 'week' ? 'Неделя' : key === 'month' ? 'Месяц' : 'Период'}</div>)}
+                    </div>}
+                </div>
+                <div className="filter-group">
+                    <button className="filter-button" onClick={() => { setIsStatusDropdownOpen(!isStatusDropdownOpen); setIsDateDropdownOpen(false); }}>
+                        Статус: {STATUS_MAP[statusFilter]} <ChevronDown className="w-4 h-4"/>
+                    </button>
+                    {isStatusDropdownOpen && <div className="filter-dropdown">
+                        {Object.keys(STATUS_MAP).map(key => <div key={key} className="dropdown-item" onClick={() => { setStatusFilter(key as any); setIsStatusDropdownOpen(false); }}>{STATUS_MAP[key as StatusFilter]}</div>)}
+                    </div>}
+                </div>
+            </div>
+
+            <p className="text-sm text-theme-secondary mb-4 text-center">
+                 Период: {formatDate(apiDateRange.dateFrom)} – {formatDate(apiDateRange.dateTo)}
+            </p>
+
+            {/* List */}
+            {loading && <div className="text-center py-8"><Loader2 className="animate-spin w-6 h-6 mx-auto text-theme-primary" /></div>}
+            {!loading && !error && filteredItems.length === 0 && (
+                <div className="empty-state-card">
+                    <Package className="w-12 h-12 mx-auto mb-4 text-theme-secondary opacity-50" />
+                    <p className="text-theme-secondary">Ничего не найдено</p>
+                </div>
+            )}
+            
+            <div className="cargo-list">
+                {filteredItems.map((item: CargoItem, idx: number) => (
+                    <div key={item.Number || idx} className="cargo-card mb-4" onClick={() => setSelectedCargo(item)}>
+                        <div className="cargo-header-row"><span className="order-number">{item.Number}</span><span className="date"><Calendar className="w-3 h-3 mr-1"/>{formatDate(item.DatePrih)}</span></div>
+                        <div className="cargo-details-grid">
+                            <div className="detail-item"><Tag className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Статус</div><div className={getStatusClass(item.State)}>{item.State}</div></div>
+                            <div className="detail-item"><Layers className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Мест</div><div className="detail-item-value">{item.Mest || '-'}</div></div>
+                            <div className="detail-item"><Scale className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Плат. вес</div><div className="detail-item-value">{item.PW || '-'}</div></div>
+                        </div>
+                        <div className="cargo-footer"><span className="sum-label">Сумма</span><span className="sum-value">{formatCurrency(item.Sum)}</span></div>
+                    </div>
+                ))}
+            </div>
+
+            {selectedCargo && <CargoDetailsModal item={selectedCargo} isOpen={!!selectedCargo} onClose={() => setSelectedCargo(null)} auth={auth} />}
+            <FilterDialog isOpen={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} dateFrom={customDateFrom} dateTo={customDateTo} onApply={(f, t) => { setCustomDateFrom(f); setCustomDateTo(t); }} />
+        </div>
+    );
 }
-.modal-label {
-    font-size: 0.9rem;
-    color: var(--color-text-secondary);
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+
+// --- SHARED COMPONENTS ---
+
+function FilterDialog({ isOpen, onClose, dateFrom, dateTo, onApply }: { isOpen: boolean; onClose: () => void; dateFrom: string; dateTo: string; onApply: (from: string, to: string) => void; }) {
+    const [tempFrom, setTempFrom] = useState(dateFrom);
+    const [tempTo, setTempTo] = useState(dateTo);
+    useEffect(() => { if (isOpen) { setTempFrom(dateFrom); setTempTo(dateTo); } }, [isOpen, dateFrom, dateTo]);
+    if (!isOpen) return null;
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <div className="modal-header"><h3>Произвольный диапазон</h3><button className="modal-close-button" onClick={onClose}><X size={20} /></button></div>
+                <form onSubmit={e => { e.preventDefault(); onApply(tempFrom, tempTo); onClose(); }}>
+                    <div style={{marginBottom: '1rem'}}><label className="detail-item-label">Дата начала:</label><input type="date" className="login-input date-input" value={tempFrom} onChange={e => setTempFrom(e.target.value)} required /></div>
+                    <div style={{marginBottom: '1.5rem'}}><label className="detail-item-label">Дата окончания:</label><input type="date" className="login-input date-input" value={tempTo} onChange={e => setTempTo(e.target.value)} required /></div>
+                    <button className="button-primary" type="submit">Применить</button>
+                </form>
+            </div>
+        </div>
+    );
 }
-.modal-input {
-    padding: 0.6rem;
-    border-radius: 0.5rem;
-    background-color: var(--color-bg-input);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-primary);
-    outline: none;
+
+function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, isOpen: boolean, onClose: () => void, auth: AuthData }) {
+    const [downloading, setDownloading] = useState<string | null>(null);
+    const [downloadError, setDownloadError] = useState<string | null>(null);
+    if (!isOpen) return null;
+
+    const renderValue = (val: any, unit = '') => {
+        // Улучшенная проверка на пустоту: проверяем на undefined, null и строку, 
+        // которая после обрезки пробелов становится пустой.
+        if (val === undefined || val === null || (typeof val === 'string' && val.trim() === "")) return '-';
+        
+        // Обработка сложных объектов/массивов
+        if (typeof val === 'object' && val !== null && !React.isValidElement(val)) {
+            try {
+                if (Object.keys(val).length === 0) return '-';
+                return <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.75rem', margin: 0}}>{JSON.stringify(val, null, 2)}</pre>;
+            } catch (e) {
+                return String(val); 
+            }
+        }
+        
+        const num = typeof val === 'string' ? parseFloat(val) : val;
+        // Форматирование чисел
+        if (typeof num === 'number' && !isNaN(num)) {
+            if (unit.toLowerCase() === 'кг' || unit.toLowerCase() === 'м³') {
+                 // Округляем до двух знаков для кг и м³
+                return `${num.toFixed(2)}${unit ? ' ' + unit : ''}`;
+            }
+        }
+        
+        return `${val}${unit ? ' ' + unit : ''}`;
+    };
+    
+    const handleDownload = async (docType: string) => {
+        if (!item.Number) return alert("Нет номера перевозки");
+        setDownloading(docType); setDownloadError(null);
+        try {
+            const res = await fetch(PROXY_API_DOWNLOAD_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: auth.login, password: auth.password, metod: DOCUMENT_METHODS[docType], number: item.Number }) });
+            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+            const data = await res.json();
+
+if (!data?.data || !data.name) {
+    throw new Error("Ответ от сервера не содержит файл.");
 }
-.modal-input:focus { border-color: var(--color-primary-blue); }
-.modal-footer { display: flex; justify-content: flex-end; }
-.primary-button {
-    background-color: var(--color-primary-blue);
-    color: white;
-    padding: 0.75rem 1.25rem;
-    border-radius: 0.5rem;
-    border: none;
-    font-size: 1rem;
-    cursor: pointer;
+
+// Декодируем base64 в бинарный файл
+const byteCharacters = atob(data.data);
+const byteNumbers = new Array(byteCharacters.length).fill(0).map((_, i) => byteCharacters.charCodeAt(i));
+const byteArray = new Uint8Array(byteNumbers);
+const blob = new Blob([byteArray], { type: "application/pdf" });
+
+const url = URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url;
+a.download = data.name || `${docType}_${item.Number}.pdf`;
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+        } catch (e: any) { setDownloadError(e.message); } finally { setDownloading(null); }
+    };
+
+    // Список явно отображаемых полей (из API примера)
+    const EXCLUDED_KEYS = ['Number', 'DatePrih', 'DateVr', 'State', 'Mest', 'PW', 'W', 'Value', 'Sum', 'StateBill', 'Sender'];
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    {/* Заголовок без "Перевозка" */}
+                    <button className="modal-close-button" onClick={onClose}><X size={20} /></button>
+                </div>
+                {downloadError && <p className="login-error mb-2">{downloadError}</p>}
+                
+                {/* Явно отображаемые поля (из API примера) */}
+                <div className="details-grid-modal">
+                    <DetailItem label="Номер" value={item.Number} />
+                    <DetailItem label="Статус" value={item.State} statusClass={getStatusClass(item.State)} />
+                    <DetailItem label="Приход" value={formatDate(item.DatePrih)} />
+                    <DetailItem label="Доставка" value={formatDate(item.DateVr)} /> {/* Используем DateVr */}
+                    <DetailItem label="Отправитель" value={item.Sender || '-'} /> {/* Добавляем Sender */}
+                    <DetailItem label="Мест" value={renderValue(item.Mest)} icon={<Layers className="w-4 h-4 mr-1 text-theme-primary"/>} />
+                    <DetailItem label="Плат. вес" value={renderValue(item.PW, 'кг')} icon={<Scale className="w-4 h-4 mr-1 text-theme-primary"/>} highlighted /> {/* Используем PW */}
+                    <DetailItem label="Вес" value={renderValue(item.W, 'кг')} icon={<Weight className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Используем W */}
+                    <DetailItem label="Объем" value={renderValue(item.Value, 'м³')} icon={<List className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Используем Value */}
+                    <DetailItem label="Стоимость" value={formatCurrency(item.Sum)} icon={<RussianRuble className="w-4 h-4 mr-1 text-theme-primary"/>} />
+                    <DetailItem label="Статус Счета" value={item.StateBill || '-'} highlighted /> {/* Используем StateBill */}
+                </div>
+                
+                {/* ДОПОЛНИТЕЛЬНЫЕ поля из API - УДАЛЕН ЗАГОЛОВОК "Прочие данные из API" */}
+                
+                <div className="details-grid-modal">
+                    {Object.entries(item)
+                        .filter(([key]) => !EXCLUDED_KEYS.includes(key))
+                        .map(([key, val]) => {
+                            // Пропускаем, если значение пустое
+                            if (val === undefined || val === null || val === "" || (typeof val === 'string' && val.trim() === "") || (typeof val === 'object' && val !== null && Object.keys(val).length === 0)) return null; 
+                            // Пропускаем, если значение - 0
+                            if (val === 0 && key.toLowerCase().includes('date') === false) return null;
+                            
+                            return <DetailItem key={key} label={key} value={renderValue(val)} />;
+                        })}
+                </div>
+                
+                <h4 style={{marginTop: '1rem', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 600}}>Документы</h4>
+                <div className="document-buttons">
+                    {['ЭР', 'АПП', 'СЧЕТ', 'УПД'].map(doc => (
+                        <button key={doc} className="doc-button" onClick={() => handleDownload(doc)} disabled={downloading === doc}>
+                            {downloading === doc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 mr-2" />} {doc}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
 }
-.primary-button:hover { background-color: #2563eb; }
-.stat-card {
-    background-color: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    border-radius: 0.75rem;
-    padding: 1.25rem;
-    text-align: left;
-    color: var(--color-text-primary);
-    cursor: default;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+
+const DetailItem = ({ label, value, icon, statusClass, highlighted }: any) => (
+    <div className={`details-item-modal ${highlighted ? 'highlighted-detail' : ''}`}>
+        <div className="detail-item-label">{label}</div>
+        <div className={`detail-item-value flex items-center ${statusClass || ''}`}>{icon} {value}</div>
+    </div>
+);
+
+function StubPage({ title }: { title: string }) { return <div className="w-full p-8 text-center"><h2 className="title">{title}</h2><p className="subtitle">Раздел в разработке</p></div>; }
+
+function TabBar({ active, onChange }: { active: Tab, onChange: (t: Tab) => void }) {
+    return (
+        <div className="tabbar-container">
+            <TabBtn label="Главная" icon={<Home />} active={active === "home"} onClick={() => onChange("home")} />
+            <TabBtn label="" icon={<Truck />} active={active === "cargo"} onClick={() => onChange("cargo")} />
+            <TabBtn label="Документы" icon={<FileText />} active={active === "docs"} onClick={() => onChange("docs")} />
+            <TabBtn label="Поддержка" icon={<MessageCircle />} active={active === "support"} onClick={() => onChange("support")} />
+            <TabBtn label="Профиль" icon={<User />} active={active === "profile"} onClick={() => onChange("profile")} />
+        </div>
+    );
 }
-.stat-value {
-    font-size: 1.7rem;
-    font-weight: 700;
-    margin-bottom: 0.25rem;
-}
-.stat-label {
-    font-size: 0.9rem;
-    color: var(--color-text-secondary);
+const TabBtn = ({ label, icon, active, onClick }: any) => (
+    <button className={`tab-button ${active ? 'active' : ''}`} onClick={onClick}>
+        <span className="tab-icon">{icon}</span>{label && <span className="tab-label">{label}</span>}
+    </button>
+);
+
+// ----------------- MAIN APP -----------------
+
+export default function App() {
+    // --- Telegram Init ---
+    useEffect(() => {
+        if (!isTg()) return;
+
+        WebApp.ready();
+        WebApp.expand();
+        setTheme(WebApp.colorScheme);
+
+        const themeHandler = () => setTheme(WebApp.colorScheme);
+        WebApp.onEvent("themeChanged", themeHandler);
+
+        return () => WebApp.offEvent("themeChanged", themeHandler);
+    }, []);
+
+    const [auth, setAuth] = useState<AuthData | null>(null);
+    const [activeTab, setActiveTab] = useState<Tab>("cargo"); 
+    const [theme, setTheme] = useState('dark'); 
+    
+    // ИНИЦИАЛИЗАЦИЯ ПУСТЫМИ СТРОКАМИ (данные берутся с фронта)
+    const [login, setLogin] = useState(""); 
+    const [password, setPassword] = useState(""); 
+    
+    const [agreeOffer, setAgreeOffer] = useState(true);
+    const [agreePersonal, setAgreePersonal] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false); 
+    
+    const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+    const [searchText, setSearchText] = useState('');
+
+    useEffect(() => { document.body.className = `${theme}-mode`; }, [theme]);
+    const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    const handleSearch = (text: string) => setSearchText(text.toLowerCase().trim());
+
+    const handleLoginSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        if (!login || !password) return setError("Введите логин и пароль");
+        if (!agreeOffer || !agreePersonal) return setError("Подтвердите согласие с условиями");
+
+        try {
+            setLoading(true);
+            const { dateFrom, dateTo } = getDateRange("all");
+            const res = await fetch(PROXY_API_BASE_URL, {
+                method: "POST", 
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ login, password, dateFrom, dateTo }),
+            });
+
+            if (!res.ok) {
+                let message = `Ошибка авторизации: ${res.status}`;
+                try {
+                    const errorData = await res.json() as ApiError;
+                    if (errorData.error) message = errorData.error;
+                } catch { }
+                setError(message);
+                return;
+            }
+            setAuth({ login, password });
+            setActiveTab("cargo"); 
+        } catch (err: any) {
+            setError("Ошибка сети.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLogout = () => {
+        setAuth(null);
+        setActiveTab("cargo");
+        setPassword(""); 
+        setIsSearchExpanded(false); setSearchText('');
+    }
+
+    if (!auth) {
+        return (
+            <div className={`app-container login-form-wrapper`}>
+                <div className="login-card">
+                    <div className="absolute top-4 right-4">
+                        <button className="theme-toggle-button-login" onClick={toggleTheme} title={theme === 'dark' ? 'Светлый режим' : 'Темный режим'}>
+                            {/* ИСПРАВЛЕНИЕ: Убран class text-yellow-400 */}
+                            {theme === 'dark' 
+                                ? <Sun className="w-5 h-5" /> 
+                                : <Moon className="w-5 h-5" />}
+                        </button>
+                    </div>
+                    <div className="flex justify-center mb-4 h-10 mt-6"><div className="logo-text">HAULZ</div></div>
+                    <div className="tagline">Доставка грузов в Калининград и обратно</div>
+                    <form onSubmit={handleLoginSubmit} className="form">
+                        <div className="field">
+                            <input className="login-input" type="text" placeholder="Логин (email)" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" />
+                        </div>
+                        <div className="field">
+                            <div className="password-input-container">
+                                <input className="login-input password" type={showPassword ? "text" : "password"} placeholder="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" style={{paddingRight: '3rem'}} />
+                                <button type="button" className="toggle-password-visibility" onClick={() => setShowPassword(!showPassword)}>
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
+                        </div>
+                        {/* ТУМБЛЕРЫ ВОССТАНОВЛЕНЫ */}
+                        <label className="checkbox-row switch-wrapper">
+                            <span>Согласие с <a href="#">публичной офертой</a></span>
+                            <div className={`switch-container ${agreeOffer ? 'checked' : ''}`} onClick={() => setAgreeOffer(!agreeOffer)}><div className="switch-knob"></div></div>
+                        </label>
+                        <label className="checkbox-row switch-wrapper">
+                            <span>Согласие на <a href="#">обработку данных</a></span>
+                            <div className={`switch-container ${agreePersonal ? 'checked' : ''}`} onClick={() => setAgreePersonal(!agreePersonal)}><div className="switch-knob"></div></div>
+                        </label>
+                        <button className="button-primary" type="submit" disabled={loading}>
+                            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : "Подтвердить"}
+                        </button>
+                    </form>
+                    {error && <p className="login-error mt-4"><AlertTriangle className="w-5 h-5 mr-2" />{error}</p>}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className={`app-container`}>
+            <header className="app-header">
+                <div className="header-top-row">
+                    <div className="header-auth-info"><UserIcon className="w-4 h-4 mr-2" /><span>{auth.login}</span></div>
+                    <div className="flex items-center space-x-3">
+                        <button className="search-toggle-button" onClick={() => { setIsSearchExpanded(!isSearchExpanded); if(isSearchExpanded) { handleSearch(''); setSearchText(''); } }}>
+                            {isSearchExpanded ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
+                        </button>
+                        <button className="search-toggle-button" onClick={handleLogout} title="Выход">
+                            <LogOut className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+                <div className={`search-container ${isSearchExpanded ? 'expanded' : 'collapsed'}`}>
+                    <Search className="w-5 h-5 text-theme-secondary flex-shrink-0 ml-1" />
+                    <input type="search" placeholder="Поиск..." className="search-input" value={searchText} onChange={(e) => { setSearchText(e.target.value); handleSearch(e.target.value); }} />
+                    {searchText && <button className="search-toggle-button" onClick={() => { setSearchText(''); handleSearch(''); }}><X className="w-4 h-4" /></button>}
+                </div>
+            </header>
+            <div className="app-main">
+                <div className="w-full max-w-4xl">
+                    {activeTab === "home" && <HomePage auth={auth} />}
+                    {activeTab === "cargo" && <CargoPage auth={auth} searchText={searchText} />}
+                    {activeTab === "docs" && <StubPage title="Документы" />}
+                    {activeTab === "support" && <StubPage title="Поддержка" />}
+                    {activeTab === "profile" && <StubPage title="Профиль" />}
+                </div>
+            </div>
+            <TabBar active={activeTab} onChange={setActiveTab} />
+        </div>
+    );
 }
