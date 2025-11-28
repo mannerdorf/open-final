@@ -2,20 +2,10 @@ import React, { useState, useEffect } from "react";
 import "./styles.css";
 import "./index.css";
 
-/* 
-    УПРОЩЁННАЯ ВЕРСИЯ APP:
+// ====================================================================
+//  Авторизация — оставлена 1:1, как ты просила
+// ====================================================================
 
-    ✔ Авторизация — НЕ ТРОГАЛ 
-    ✔ После входа — сразу страница ГРУЗЫ
-    ✔ Нет нижнего меню
-    ✔ Нет главной, документов, профиля, поддержки
-    ✔ Весь функционал грузов взят из App (20)
-    ✔ Фильтры, поиск, модалка — всё сохранено
-*/
-
-// ==========================
-// Авторизация
-// ==========================
 export default function App() {
   const [auth, setAuth] = useState(() => {
     try {
@@ -66,20 +56,17 @@ export default function App() {
 
       localStorage.setItem("haulz_auth", JSON.stringify(session));
       setAuth(session);
-    } catch (err) {
+    } catch {
       setError("Ошибка сети");
     }
   }
 
-  // ==========================
-  // Если нет авторизации → показать СТАРУЮ страницу входа (как в App20)
-  // ==========================
+  // ========== ЕСЛИ НЕТ АВТОРИЗАЦИИ — ПОКАЗЫВАЕМ СТАРУЮ СТРАНИЦУ ВХОДА ==========
   if (!auth) {
     return (
       <div className="login-wrapper">
         <div className="login-card-new">
 
-          {/* Тумблер темы — как был */}
           <div
             className="theme-toggle"
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
@@ -128,14 +115,15 @@ export default function App() {
     );
   }
 
-  // ==========================
-  // ЕСЛИ ЕСТЬ АВТОРИЗАЦИЯ → СТРАНИЦА ГРУЗОВ
-  // ==========================
+  // ====================================================================
+  //  ЕСЛИ ЕСТЬ АВТОРИЗАЦИЯ — ПОКАЗЫВАЕМ СТРАНИЦУ ГРУЗОВ
+  // ====================================================================
+
   return <CargoPage auth={auth} setAuth={setAuth} />;
 }
 
 // ====================================================================
-// СТРАНИЦА ГРУЗОВ (ВНЕ вынесено ИЗ App20.tsx — логика сохранена 1:1)
+// СТРАНИЦА ГРУЗОВ (Вырезана из App20 и очищена)
 // ====================================================================
 
 function CargoPage({ auth, setAuth }) {
@@ -145,9 +133,6 @@ function CargoPage({ auth, setAuth }) {
 
   const [modalItem, setModalItem] = useState(null);
 
-  // ==========================
-  // Загрузка данных
-  // ==========================
   useEffect(() => {
     loadCargo();
   }, []);
@@ -170,11 +155,9 @@ function CargoPage({ auth, setAuth }) {
     }
   }
 
-  // ==========================
-  // Фильтрация по поиску
-  // ==========================
   const filtered = cargoData.filter((item) => {
     if (!searchValue) return true;
+
     return (
       item.Номер?.toLowerCase().includes(searchValue.toLowerCase()) ||
       item.Грузоотправитель?.toLowerCase().includes(searchValue.toLowerCase()) ||
@@ -182,13 +165,10 @@ function CargoPage({ auth, setAuth }) {
     );
   });
 
-  // ==========================
-  // UI
-  // ==========================
   return (
     <div className="app-container">
 
-      {/* ХЕДЕР — СОХРАНЁН (как ты попросила) */}
+      {/* ===== ХЕДЕР (оставлен по ТЗ) ===== */}
       <div className="app-header">
         <h1 className="header-title">Грузы</h1>
 
@@ -199,7 +179,7 @@ function CargoPage({ auth, setAuth }) {
         </div>
       </div>
 
-      {/* ПОИСК */}
+      {/* ===== ПОИСК ===== */}
       <div className="search-container">
         <input
           className="search-input"
@@ -209,7 +189,7 @@ function CargoPage({ auth, setAuth }) {
         />
       </div>
 
-      {/* Фильтр периода — сохраняем 1:1 */}
+      {/* ===== Фильтр периода ===== */}
       <div className="period-filter">
         <button
           className={activeFilter === "week" ? "active" : ""}
@@ -240,7 +220,7 @@ function CargoPage({ auth, setAuth }) {
         </button>
       </div>
 
-      {/* СПИСОК ГРУЗОВ */}
+      {/* ===== СПИСОК ГРУЗОВ ===== */}
       <div className="cargo-list">
         {filtered.map((item, idx) => (
           <div
@@ -276,43 +256,20 @@ function CargoPage({ auth, setAuth }) {
         ))}
       </div>
 
-      {/* МОДАЛКА */}
+      {/* ===== МОДАЛКА ===== */}
       {modalItem && (
         <div className="modal-backdrop" onClick={() => setModalItem(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Перевозка № {modalItem.Номер}</h2>
 
-            <div className="modal-row">
-              <b>Статус:</b> {modalItem.Статус}
-            </div>
-
-            <div className="modal-row">
-              <b>Отправитель:</b> {modalItem.Грузоотправитель}
-            </div>
-
-            <div className="modal-row">
-              <b>Получатель:</b> {modalItem.Грузополучатель}
-            </div>
-
-            <div className="modal-row">
-              <b>Погрузка:</b> {modalItem.ГородПогрузки}
-            </div>
-
-            <div className="modal-row">
-              <b>Выгрузка:</b> {modalItem.ГородВыгрузки}
-            </div>
-
-            <div className="modal-row">
-              <b>Вес:</b> {modalItem.Вес} кг
-            </div>
-
-            <div className="modal-row">
-              <b>Платный вес:</b> {modalItem.ПлатныйВес} кг
-            </div>
-
-            <div className="modal-row">
-              <b>Объём:</b> {modalItem.Объем} м³
-            </div>
+            <div className="modal-row"><b>Статус:</b> {modalItem.Статус}</div>
+            <div className="modal-row"><b>Отправитель:</b> {modalItem.Грузоотправитель}</div>
+            <div className="modal-row"><b>Получатель:</b> {modalItem.Грузополучатель}</div>
+            <div className="modal-row"><b>Погрузка:</b> {modalItem.ГородПогрузки}</div>
+            <div className="modal-row"><b>Выгрузка:</b> {modalItem.ГородВыгрузки}</div>
+            <div className="modal-row"><b>Вес:</b> {modalItem.Вес} кг</div>
+            <div className="modal-row"><b>Платный вес:</b> {modalItem.ПлатныйВес} кг</div>
+            <div className="modal-row"><b>Объём:</b> {modalItem.Объем} м³</div>
 
             <button className="modal-close" onClick={() => setModalItem(null)}>
               Закрыть
@@ -320,6 +277,7 @@ function CargoPage({ auth, setAuth }) {
           </div>
         </div>
       )}
+
     </div>
   );
 }
