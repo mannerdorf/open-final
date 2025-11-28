@@ -1,62 +1,89 @@
 import { FormEvent, useEffect, useState, useCallback, useMemo } from "react";
+// Импортируем все необходимые иконки
 import { 
-    LogOut, Truck, User as UserIcon, Loader2, AlertTriangle, 
-    Search, X 
-} from "lucide-react";
+    LogOut, Home, Truck, FileText, MessageCircle, User, Loader2, Check, X, Moon, Sun, Eye, EyeOff, AlertTriangle, Package, Calendar, Tag, Layers, Weight, Filter, Search, ChevronDown, User as UserIcon, Scale, RussianRuble, List, Download, FileText as FileTextIcon, Send, 
+    LayoutGrid, Maximize, TrendingUp, CornerUpLeft, ClipboardCheck, CreditCard, Minus 
+} from 'lucide-react';
 import React from "react";
 import "./styles.css";
+// --- TELEGRAM MINI APP SUPPORT ---
 import WebApp from "@twa-dev/sdk";
 
 const isTg = () => typeof window !== "undefined" && window.Telegram?.WebApp;
 
 import { DOCUMENT_METHODS } from "./documentMethods";
 
+
 // --- CONFIGURATION ---
 const PROXY_API_BASE_URL = '/api/perevozki'; 
 const PROXY_API_DOWNLOAD_URL = '/api/download'; 
 
 // --- TYPES ---
-type ApiError = { error?: string; };
+type ApiError = { error?: string; [key: string]: unknown; };
 type AuthData = { login: string; password: string; };
-
-// Единственная вкладка — CARGO
-type Tab = "cargo";
-
-// Дальше оставлены только типы CargoPage
-type DateFilter = "all" | "today" | "week" | "month" | "custom";
+type Tab = "home" | "cargo" | "docs" | "support" | "profile";
+type DateFilter = "все" | "сегодня" | "неделя" | "месяц" | "период";
 type StatusFilter = "all" | "accepted" | "in_transit" | "ready" | "delivering" | "delivered";
+type HomePeriodFilter = "today" | "week" | "month" | "year" | "custom";
 
+// --- ИСПОЛЬЗУЕМ ТОЛЬКО ПЕРЕМЕННЫЕ ИЗ API ---
 type CargoItem = {
-    Number?: string;
-    DatePrih?: string;
-    DateVr?: string;
-    State?: string;
-    Mest?: number | string;
-    PW?: number | string;
-    W?: number | string;
-    Value?: number | string;
-    Sum?: number | string;
-    StateBill?: string;
-    Sender?: string;
-    [key: string]: any;
+    Number?: string; DatePrih?: string; DateVr?: string; State?: string; Mest?: number | string; 
+    PW?: number | string; W?: number | string; Value?: number | string; Sum?: number | string; 
+    StateBill?: string; Sender?: string; [key: string]: any; // Для всех остальных полей
 };
 
-const getTodayDate = () => new Date().toISOString().split('T')[0];
+type CargoStat = {
+    key: string; label: string; icon: React.ElementType; value: number | string; unit: string; bgColor: string;
+};
 
+// --- CONSTANTS ---
+const getTodayDate = () => new Date().toISOString().split('T')[0];
 const getSixMonthsAgoDate = () => {
     const d = new Date();
     d.setMonth(d.getMonth() - 6); 
     return d.toISOString().split('T')[0];
 };
-
 const DEFAULT_DATE_FROM = getSixMonthsAgoDate();
 const DEFAULT_DATE_TO = getTodayDate();
 
-// DATE FILTERS
+// Статистика (заглушка)
+const STATS_LEVEL_1: CargoStat[] = [
+    { key: 'total', label: 'Всего перевозок', icon: LayoutGrid, value: 125, unit: 'шт', bgColor: 'bg-indigo-500' },
+    { key: 'payments', label: 'Счета', icon: RussianRuble, value: '1,250,000', unit: '₽', bgColor: 'bg-green-500' },
+    { key: 'weight', label: 'Вес', icon: TrendingUp, value: 5400, unit: 'кг', bgColor: 'bg-yellow-500' },
+    { key: 'volume', label: 'Объем', icon: Maximize, value: 125, unit: 'м³', bgColor: 'bg-pink-500' },
+];
+
+const STATS_LEVEL_2: { [key: string]: CargoStat[] } = {
+    total: [
+        { key: 'total_new', label: 'В работе', icon: Truck, value: 35, unit: 'шт', bgColor: 'bg-blue-400' },
+        { key: 'total_in_transit', label: 'В пути', icon: TrendingUp, value: 50, unit: 'шт', bgColor: 'bg-indigo-400' },
+        { key: 'total_completed', label: 'Завершено', icon: Check, value: 40, unit: 'шт', bgColor: 'bg-green-400' },
+        { key: 'total_cancelled', label: 'Отменено', icon: X, value: 0, unit: 'шт', bgColor: 'bg-red-400' },
+    ],
+    payments: [
+        { key: 'pay_paid', label: 'Оплачено', icon: ClipboardCheck, value: 750000, unit: '₽', bgColor: 'bg-green-400' },
+        { key: 'pay_due', label: 'К оплате', icon: CreditCard, value: 500000, unit: '₽', bgColor: 'bg-yellow-400' },
+        { key: 'pay_none', label: 'Нет счета', icon: Minus, value: 0, unit: 'шт', bgColor: 'bg-gray-400' },
+    ],
+    weight: [
+        { key: 'weight_current', label: 'Общий вес', icon: Weight, value: 5400, unit: 'кг', bgColor: 'bg-red-400' },
+        { key: 'weight_paid', label: 'Платный вес', icon: Scale, value: 4500, unit: 'кг', bgColor: 'bg-orange-400' },
+        { key: 'weight_free', label: 'Бесплатный вес', icon: Layers, value: 900, unit: 'кг', bgColor: 'bg-purple-400' },
+    ],
+    volume: [
+        { key: 'vol_current', label: 'Объем всего', icon: Maximize, value: 125, unit: 'м³', bgColor: 'bg-pink-400' },
+        { key: 'vol_boxes', label: 'Кол-во мест', icon: Layers, value: 125, unit: 'шт', bgColor: 'bg-teal-400' },
+    ],
+};
+
+
+// --- HELPERS ---
 const getDateRange = (filter: DateFilter) => {
     const today = new Date();
     const dateTo = getTodayDate();
-    let dateFrom = dateTo;
+    let dateFrom = getTodayDate();
     switch (filter) {
         case 'all': dateFrom = getSixMonthsAgoDate(); break;
         case 'today': dateFrom = getTodayDate(); break;
@@ -65,60 +92,97 @@ const getDateRange = (filter: DateFilter) => {
         default: break;
     }
     return { dateFrom, dateTo };
-};
+}
 
-const formatDate = (dateString: string | undefined) => {
+const formatDate = (dateString: string | undefined): string => {
     if (!dateString) return '-';
-    const clean = dateString.split("T")[0];
-    const d = new Date(clean);
-    return !isNaN(d.getTime()) ? d.toLocaleDateString("ru-RU") : dateString;
+    try {
+        // Убеждаемся, что строка - это только дата (без времени) для корректного парсинга
+        const cleanDateString = dateString.split('T')[0]; 
+        const date = new Date(cleanDateString);
+        if (!isNaN(date.getTime())) return date.toLocaleDateString('ru-RU');
+    } catch { }
+    return dateString;
 };
 
-const formatCurrency = (value: any) => {
-    const n = parseFloat(String(value).replace(",", "."));
-    return isNaN(n) ? "-" : new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB" }).format(n);
+const formatCurrency = (value: number | string | undefined): string => {
+    if (value === undefined || value === null || (typeof value === 'string' && value.trim() === "")) return '-';
+    const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
+    return isNaN(num) ? String(value) : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2 }).format(num);
 };
 
-const getStatusClass = (status: string = "") => {
-    const s = status.toLowerCase();
-    if (s.includes("достав")) return "status-value success";
-    if (s.includes("пути")) return "status-value transit";
-    if (s.includes("принят") || s.includes("оформ")) return "status-value accepted";
-    if (s.includes("готов")) return "status-value ready";
-    return "status-value";
+const getStatusClass = (status: string | undefined) => {
+    const lower = (status || '').toLowerCase();
+    if (lower.includes('доставлен') || lower.includes('заверш')) return 'status-value success';
+    if (lower.includes('пути') || lower.includes('отправлен')) return 'status-value transit';
+    if (lower.includes('принят') || lower.includes('оформлен')) return 'status-value accepted';
+    if (lower.includes('готов')) return 'status-value ready';
+    return 'status-value';
 };
 
-const STATUS_MAP: Record<StatusFilter,string> = {
-    all:"Все",
-    accepted:"Принят",
-    in_transit:"В пути",
-    ready:"Готов",
-    delivering:"На доставке",
-    delivered:"Доставлено"
-};
+const getFilterKeyByStatus = (s: string | undefined): StatusFilter => { 
+    if (!s) return 'all'; 
+    const l = s.toLowerCase(); 
+    if (l.includes('доставлен') || l.includes('заверш')) return 'delivered'; 
+    if (l.includes('пути') || l.includes('отправлен')) return 'in_transit';
+    if (l.includes('принят') || l.includes('оформлен')) return 'accepted';
+    if (l.includes('готов')) return 'ready';
+    if (l.includes('доставке')) return 'delivering';
+    return 'all'; 
+}
+
+const STATUS_MAP: Record<StatusFilter, string> = { "all": "Все", "accepted": "Принят", "in_transit": "В пути", "ready": "Готов", "delivering": "На доставке", "delivered": "Доставлено" };
 
 
-/* ============================================================
-                     CARGO PAGE (ОСТАВЛЕНА ОДНА)
-   ============================================================ */
+// ================== COMPONENTS ==================
 
-function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string }) {
+// --- HOME PAGE (STATISTICS) ---
+
+function HomePage({ auth }: { auth: AuthData }) {
+    const [periodFilter, setPeriodFilter] = useState<HomePeriodFilter>("month");
+    const [customFrom, setCustomFrom] = useState(DEFAULT_DATE_FROM);
+    const [customTo, setCustomTo] = useState(DEFAULT_DATE_TO);
     const [items, setItems] = useState<CargoItem[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false);
+    const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
 
-    const [dateFilter, setDateFilter] = useState<DateFilter>("all");
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+    const apiDateRange = useMemo(() => {
+        if (periodFilter === "custom") {
+            return { dateFrom: customFrom, dateTo: customTo };
+        }
+        const today = new Date();
+        const dateTo = getTodayDate();
+        let dateFrom = dateTo;
 
-    const apiDateRange = useMemo(
-        () => getDateRange(dateFilter),
-        [dateFilter]
-    );
+        switch (periodFilter) {
+            case "today":
+                dateFrom = getTodayDate();
+                break;
+            case "week":
+                today.setDate(today.getDate() - 7);
+                dateFrom = today.toISOString().split("T")[0];
+                break;
+            case "month":
+                today.setMonth(today.getMonth() - 1);
+                dateFrom = today.toISOString().split("T")[0];
+                break;
+            case "year":
+                today.setFullYear(today.getFullYear() - 1);
+                dateFrom = today.toISOString().split("T")[0];
+                break;
+            default:
+                break;
+        }
 
-    const loadCargo = useCallback(async () => {
+        return { dateFrom, dateTo };
+    }, [periodFilter, customFrom, customTo]);
+
+    const loadStats = useCallback(async (dateFrom: string, dateTo: string) => {
+        if (!auth) return;
         setLoading(true);
         setError(null);
-
         try {
             const res = await fetch(PROXY_API_BASE_URL, {
                 method: "POST",
@@ -126,191 +190,674 @@ function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string })
                 body: JSON.stringify({
                     login: auth.login,
                     password: auth.password,
-                    dateFrom: apiDateRange.dateFrom,
-                    dateTo: apiDateRange.dateTo,
-                })
+                    dateFrom,
+                    dateTo,
+                }),
             });
-
-            if (!res.ok) throw new Error("Ошибка загрузки данных");
+            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
             const data = await res.json();
-            const list = Array.isArray(data) ? data : data.items || [];
-            setItems(list);
+            const list = Array.isArray(data) ? data : (data.items || []);
+            const mapNumber = (value: any): number => {
+                if (value === null || value === undefined) return 0;
+                if (typeof value === "number") return value;
+                const parsed = parseFloat(String(value).replace(",", "."));
+                return isNaN(parsed) ? 0 : parsed;
+            };
+            setItems(
+                list.map((item: any) => ({
+                    ...item,
+                    Number: item.Number,
+                    DatePrih: item.DatePrih,
+                    DateVr: item.DateVr,
+                    State: item.State,
+                    Mest: mapNumber(item.Mest),
+                    PW: mapNumber(item.PW),
+                    W: mapNumber(item.W),
+                    Value: mapNumber(item.Value),
+                    Sum: mapNumber(item.Sum),
+                    StateBill: item.StateBill,
+                    Sender: item.Sender,
+                }))
+            );
         } catch (e: any) {
-            setError(e.message);
+            setError(e.message || "Ошибка загрузки данных");
         } finally {
             setLoading(false);
         }
-    }, [auth, apiDateRange]);
+    }, [auth]);
 
     useEffect(() => {
-        loadCargo();
-    }, [loadCargo]);
+        loadStats(apiDateRange.dateFrom, apiDateRange.dateTo);
+    }, [apiDateRange, loadStats]);
 
+    const totalShipments = items.length;
+    const totalPaidWeight = useMemo(
+        () => items.reduce((sum, item) => sum + (Number(item.PW) || 0), 0),
+        [items]
+    );
+    const totalWeight = useMemo(
+        () => items.reduce((sum, item) => sum + (Number(item.W) || 0), 0),
+        [items]
+    );
+    const totalVolume = useMemo(
+        () => items.reduce((sum, item) => sum + (Number(item.Value) || 0), 0),
+        [items]
+    );
 
-    const filtered = useMemo(() => {
-        let r = items;
+    const formatTons = (kg: number) => {
+        if (!kg) return "0 т";
+        return (kg / 1000).toFixed(1) + " т";
+    };
 
-        if (statusFilter !== "all") {
-            r = r.filter(i => getStatusClass(i.State).includes(statusFilter));
+    const periodLabel = useMemo(() => {
+        const { dateFrom, dateTo } = apiDateRange;
+        if (periodFilter === "month") {
+            const d = new Date(dateFrom);
+            if (!isNaN(d.getTime())) {
+                return d.toLocaleDateString("ru-RU", {
+                    month: "long",
+                    year: "numeric",
+                });
+            }
         }
-
-        if (searchText) {
-            const s = searchText.toLowerCase();
-            r = r.filter(i =>
-                `${i.Number} ${i.State} ${i.Sender}`.toLowerCase().includes(s)
-            );
+        if (periodFilter === "year") {
+            const d = new Date(dateFrom);
+            if (!isNaN(d.getTime())) {
+                return d.getFullYear().toString();
+            }
         }
-        return r;
-    }, [items, statusFilter, searchText]);
+        return `${formatDate(dateFrom)} – ${formatDate(dateTo)}`;
+    }, [apiDateRange, periodFilter]);
 
+    const selectPeriod = (value: HomePeriodFilter) => {
+        setPeriodFilter(value);
+        setIsPeriodModalOpen(false);
+        if (value !== "custom") {
+            // при выборе предустановленного периода сбрасываем кастомные диапазоны к дефолту
+            setCustomFrom(DEFAULT_DATE_FROM);
+            setCustomTo(DEFAULT_DATE_TO);
+        }
+    };
 
     return (
-        <div className="w-full">
-            <p className="text-sm text-theme-secondary mb-4 text-center">
-                Период: {formatDate(apiDateRange.dateFrom)} – {formatDate(apiDateRange.dateTo)}
-            </p>
+        <div className="w-full max-w-lg">
+            {/* Заголовок периода */}
+            <div className="home-period-header mb-6">
+                <button
+                    className="home-period-button"
+                    onClick={() => setIsPeriodModalOpen(true)}
+                >
+                    <span className="home-period-title">
+                        Период:{" "}
+                        <span className="home-period-value">
+                            {periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)}
+                        </span>
+                    </span>
+                    <ChevronDown className="w-5 h-5 ml-2" />
+                </button>
+            </div>
 
+            {/* Карточки статистики */}
+            <div className="stats-grid">
+                <div className="stat-card">
+                    <div className="flex justify-between items-center mb-2">
+                        <Package className="w-5 h-5 text-theme-primary" />
+                        <span className="text-xs text-theme-secondary">
+                            За период
+                        </span>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                        {totalShipments}
+                    </div>
+                    <div className="text-sm text-theme-secondary mt-1">
+                        Всего перевозок
+                    </div>
+                </div>
+
+                <div className="stat-card">
+                    <div className="flex justify-between items-center mb-2">
+                        <Scale className="w-5 h-5 text-theme-primary" />
+                        <span className="text-xs text-theme-secondary">
+                            Платный вес
+                        </span>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                        {formatTons(totalPaidWeight)}
+                    </div>
+                    <div className="text-sm text-theme-secondary mt-1">
+                        Платный вес за период
+                    </div>
+                </div>
+
+                <div className="stat-card">
+                    <div className="flex justify-between items-center mb-2">
+                        <Weight className="w-5 h-5 text-theme-primary" />
+                        <span className="text-xs text-theme-secondary">Вес</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                        {formatTons(totalWeight)}
+                    </div>
+                    <div className="text-sm text-theme-secondary mt-1">
+                        Фактический вес за период
+                    </div>
+                </div>
+
+                <div className="stat-card">
+                    <div className="flex justify-between items-center mb-2">
+                        <Maximize className="w-5 h-5 text-theme-primary" />
+                        <span className="text-xs text-theme-secondary">Объем</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                        {totalVolume.toFixed(1)}м³
+                    </div>
+                    <div className="text-sm text-theme-secondary mt-1">
+                        Объем за период
+                    </div>
+                </div>
+            </div>
+
+            {/* Загрузка / ошибка */}
             {loading && (
                 <div className="text-center py-8">
                     <Loader2 className="animate-spin w-6 h-6 mx-auto text-theme-primary" />
+                    <p className="text-sm text-theme-secondary mt-2">
+                        Обновление данных...
+                    </p>
                 </div>
             )}
-
             {error && (
-                <p className="login-error">{error}</p>
-            )}
-
-            {!loading && filtered.length === 0 && (
-                <div className="empty-state-card">
-                    <p>Ничего не найдено</p>
+                <div className="login-error mt-4">
+                    <AlertTriangle className="w-5 h-5 mr-2" />
+                    {error}
                 </div>
             )}
 
-            <div className="cargo-list">
-                {filtered.map((item: CargoItem, idx) => (
-                    <div key={idx} className="cargo-card mb-4">
-                        <div className="cargo-header-row">
-                            <span className="order-number">{item.Number}</span>
-                            <span className="date">{formatDate(item.DatePrih)}</span>
+            {/* Модальное окно выбора периода */}
+            {isPeriodModalOpen && (
+                <div
+                    className="modal-overlay"
+                    onClick={() => setIsPeriodModalOpen(false)}
+                >
+                    <div
+                        className="modal-content"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="modal-header">
+                            <h3>Выбор периода</h3>
+                            <button
+                                className="modal-close-button"
+                                onClick={() => setIsPeriodModalOpen(false)}
+                            >
+                                <X size={20} />
+                            </button>
                         </div>
-
-                        <div className="cargo-details-grid">
-                            <div className="detail-item">
-                                <div className="detail-item-label">Статус</div>
-                                <div className={getStatusClass(item.State)}>
-                                    {item.State}
-                                </div>
-                            </div>
-                            <div className="detail-item">
-                                <div className="detail-item-label">Мест</div>
-                                <div className="detail-item-value">{item.Mest}</div>
-                            </div>
-                            <div className="detail-item">
-                                <div className="detail-item-label">Плат. вес</div>
-                                <div className="detail-item-value">{item.PW}</div>
-                            </div>
-                        </div>
-
-                        <div className="cargo-footer">
-                            <span className="sum-label">Сумма</span>
-                            <span className="sum-value">{formatCurrency(item.Sum)}</span>
+                        <div className="space-y-3">
+                            <button
+                                className="period-option-button"
+                                onClick={() => selectPeriod("week")}
+                            >
+                                Неделя
+                            </button>
+                            <button
+                                className="period-option-button"
+                                onClick={() => selectPeriod("month")}
+                            >
+                                Месяц
+                            </button>
+                            <button
+                                className="period-option-button"
+                                onClick={() => selectPeriod("year")}
+                            >
+                                Год
+                            </button>
+                            <button
+                                className="period-option-button"
+                                onClick={() => {
+                                    setIsPeriodModalOpen(false);
+                                    setIsCustomModalOpen(true);
+                                    setPeriodFilter("custom");
+                                }}
+                            >
+                                Произвольный период
+                            </button>
                         </div>
                     </div>
-                ))}
+                </div>
+            )}
+
+            {/* Модальное окно выбора произвольного периода */}
+            <CustomPeriodModal
+                isOpen={isCustomModalOpen}
+                onClose={() => setIsCustomModalOpen(false)}
+                dateFrom={customFrom}
+                dateTo={customTo}
+                onApply={(from, to) => {
+                    setCustomFrom(from);
+                    setCustomTo(to);
+                }}
+            />
+        </div>
+    );
+}
+
+function CustomPeriodModal({
+    isOpen,
+    onClose,
+    dateFrom,
+    dateTo,
+    onApply,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    dateFrom: string;
+    dateTo: string;
+    onApply: (from: string, to: string) => void;
+}) {
+    const [localFrom, setLocalFrom] = useState<string>(dateFrom);
+    const [localTo, setLocalTo] = useState<string>(dateTo);
+
+    useEffect(() => {
+        setLocalFrom(dateFrom);
+        setLocalTo(dateTo);
+    }, [dateFrom, dateTo]);
+
+    if (!isOpen) return null;
+
+    const handleApply = () => {
+        if (!localFrom || !localTo) return;
+        onApply(localFrom, localTo);
+        onClose();
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div
+                className="modal-content"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="modal-header">
+                    <h3>Произвольный период</h3>
+                    <button
+                        className="modal-close-button"
+                        onClick={onClose}
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="modal-body">
+                    <label className="modal-label">
+                        Дата с
+                        <input
+                            type="date"
+                            className="modal-input"
+                            value={localFrom}
+                            onChange={(e) => setLocalFrom(e.target.value)}
+                        />
+                    </label>
+                    <label className="modal-label">
+                        Дата по
+                        <input
+                            type="date"
+                            className="modal-input"
+                            value={localTo}
+                            onChange={(e) => setLocalTo(e.target.value)}
+                        />
+                    </label>
+                </div>
+                <div className="modal-footer">
+                    <button className="primary-button" onClick={handleApply}>
+                        Применить
+                    </button>
+                </div>
             </div>
         </div>
     );
 }
 
-/* ============================================================
-                         TABBAR (1 КНОПКА)
-   ============================================================ */
+// --- CARGO PAGE (LIST ONLY) ---
+function CargoPage({ auth, searchText }: { auth: AuthData, searchText: string }) {
+    const [items, setItems] = useState<CargoItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedCargo, setSelectedCargo] = useState<CargoItem | null>(null);
+    
+    // Filters State
+    const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+    const [customDateFrom, setCustomDateFrom] = useState(DEFAULT_DATE_FROM);
+    const [customDateTo, setCustomDateTo] = useState(DEFAULT_DATE_TO);
+    const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+    const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
 
-function TabBar({ active, onChange }: { active: Tab, onChange: (t: Tab) => void }) {
+    const apiDateRange = useMemo(() => dateFilter === "custom" ? { dateFrom: customDateFrom, dateTo: customDateTo } : getDateRange(dateFilter), [dateFilter, customDateFrom, customDateTo]);
+
+    // Удалена функция findDeliveryDate, используем DateVr напрямую.
+
+    const loadCargo = useCallback(async (dateFrom: string, dateTo: string) => {
+        setLoading(true); setError(null);
+        try {
+            const res = await fetch(PROXY_API_BASE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: auth.login, password: auth.password, dateFrom, dateTo }) });
+            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : data.items || [];
+            
+            // МАППИНГ ДАННЫХ: используем только указанные поля API
+            setItems(list.map((item: any) => ({
+                ...item,
+                Number: item.Number, 
+                DatePrih: item.DatePrih, 
+                DateVr: item.DateVr, // Дата доставки
+                State: item.State, 
+                Mest: item.Mest, 
+                PW: item.PW, // Платный вес
+                W: item.W, // Общий вес
+                Value: item.Value, // Объем
+                Sum: item.Sum, 
+                StateBill: item.StateBill, // Статус счета
+                Sender: item.Sender, // Отправитель
+            })));
+        } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+    }, [auth]);
+
+    useEffect(() => { loadCargo(apiDateRange.dateFrom, apiDateRange.dateTo); }, [apiDateRange, loadCargo]);
+
+    // Client-side filtering
+    const filteredItems = useMemo(() => {
+        let res = items;
+        if (statusFilter !== 'all') res = res.filter(i => getFilterKeyByStatus(i.State) === statusFilter);
+        if (searchText) {
+            const lower = searchText.toLowerCase();
+            // Обновлены поля поиска: PW вместо PV, добавлен Sender
+            res = res.filter(i => [i.Number, i.State, i.Sender, formatDate(i.DatePrih), formatCurrency(i.Sum), String(i.PW), String(i.Mest)].join(' ').toLowerCase().includes(lower));
+        }
+        return res;
+    }, [items, statusFilter, searchText]);
+
+
     return (
-        <div className="tabbar-container">
-            <button 
-                className={`tab-button ${active === "cargo" ? "active" : ""}`}
-                onClick={() => onChange("cargo")}
-            >
-                <Truck className="w-5 h-5" />
-            </button>
+        <div className="w-full">
+            {/* Filters */}
+            <div className="filters-container">
+                <div className="filter-group">
+                    <button className="filter-button" onClick={() => { setIsDateDropdownOpen(!isDateDropdownOpen); setIsStatusDropdownOpen(false); }}>
+                        Дата: {dateFilter === 'custom' ? 'Период' : dateFilter} <ChevronDown className="w-4 h-4"/>
+                    </button>
+                    {isDateDropdownOpen && <div className="filter-dropdown">
+                        {['all', 'today', 'week', 'month', 'custom'].map(key => <div key={key} className="dropdown-item" onClick={() => { setDateFilter(key as any); setIsDateDropdownOpen(false); if(key==='custom') setIsCustomModalOpen(true); }}>{key === 'all' ? 'Все' : key === 'today' ? 'Сегодня' : key === 'week' ? 'Неделя' : key === 'month' ? 'Месяц' : 'Период'}</div>)}
+                    </div>}
+                </div>
+                <div className="filter-group">
+                    <button className="filter-button" onClick={() => { setIsStatusDropdownOpen(!isStatusDropdownOpen); setIsDateDropdownOpen(false); }}>
+                        Статус: {STATUS_MAP[statusFilter]} <ChevronDown className="w-4 h-4"/>
+                    </button>
+                    {isStatusDropdownOpen && <div className="filter-dropdown">
+                        {Object.keys(STATUS_MAP).map(key => <div key={key} className="dropdown-item" onClick={() => { setStatusFilter(key as any); setIsStatusDropdownOpen(false); }}>{STATUS_MAP[key as StatusFilter]}</div>)}
+                    </div>}
+                </div>
+            </div>
+
+            <p className="text-sm text-theme-secondary mb-4 text-center">
+                 Период: {formatDate(apiDateRange.dateFrom)} – {formatDate(apiDateRange.dateTo)}
+            </p>
+
+            {/* List */}
+            {loading && <div className="text-center py-8"><Loader2 className="animate-spin w-6 h-6 mx-auto text-theme-primary" /></div>}
+            {!loading && !error && filteredItems.length === 0 && (
+                <div className="empty-state-card">
+                    <Package className="w-12 h-12 mx-auto mb-4 text-theme-secondary opacity-50" />
+                    <p className="text-theme-secondary">Ничего не найдено</p>
+                </div>
+            )}
+            
+            <div className="cargo-list">
+                {filteredItems.map((item: CargoItem, idx: number) => (
+                    <div key={item.Number || idx} className="cargo-card mb-4" onClick={() => setSelectedCargo(item)}>
+                        <div className="cargo-header-row"><span className="order-number">{item.Number}</span><span className="date"><Calendar className="w-3 h-3 mr-1"/>{formatDate(item.DatePrih)}</span></div>
+                        <div className="cargo-details-grid">
+                            <div className="detail-item"><Tag className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Статус</div><div className={getStatusClass(item.State)}>{item.State}</div></div>
+                            <div className="detail-item"><Layers className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Мест</div><div className="detail-item-value">{item.Mest || '-'}</div></div>
+                            <div className="detail-item"><Scale className="w-4 h-4 text-theme-primary"/><div className="detail-item-label">Плат. вес</div><div className="detail-item-value">{item.PW || '-'}</div></div>
+                        </div>
+                        <div className="cargo-footer"><span className="sum-label">Сумма</span><span className="sum-value">{formatCurrency(item.Sum)}</span></div>
+                    </div>
+                ))}
+            </div>
+
+            {selectedCargo && <CargoDetailsModal item={selectedCargo} isOpen={!!selectedCargo} onClose={() => setSelectedCargo(null)} auth={auth} />}
+            <FilterDialog isOpen={isCustomModalOpen} onClose={() => setIsCustomModalOpen(false)} dateFrom={customDateFrom} dateTo={customDateTo} onApply={(f, t) => { setCustomDateFrom(f); setCustomDateTo(t); }} />
         </div>
     );
 }
 
-/* ============================================================
-                           MAIN APP
-   ============================================================ */
+// --- SHARED COMPONENTS ---
+
+function FilterDialog({ isOpen, onClose, dateFrom, dateTo, onApply }: { isOpen: boolean; onClose: () => void; dateFrom: string; dateTo: string; onApply: (from: string, to: string) => void; }) {
+    const [tempFrom, setTempFrom] = useState(dateFrom);
+    const [tempTo, setTempTo] = useState(dateTo);
+    useEffect(() => { if (isOpen) { setTempFrom(dateFrom); setTempTo(dateTo); } }, [isOpen, dateFrom, dateTo]);
+    if (!isOpen) return null;
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <div className="modal-header"><h3>Произвольный диапазон</h3><button className="modal-close-button" onClick={onClose}><X size={20} /></button></div>
+                <form onSubmit={e => { e.preventDefault(); onApply(tempFrom, tempTo); onClose(); }}>
+                    <div style={{marginBottom: '1rem'}}><label className="detail-item-label">Дата начала:</label><input type="date" className="login-input date-input" value={tempFrom} onChange={e => setTempFrom(e.target.value)} required /></div>
+                    <div style={{marginBottom: '1.5rem'}}><label className="detail-item-label">Дата окончания:</label><input type="date" className="login-input date-input" value={tempTo} onChange={e => setTempTo(e.target.value)} required /></div>
+                    <button className="button-primary" type="submit">Применить</button>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+function CargoDetailsModal({ item, isOpen, onClose, auth }: { item: CargoItem, isOpen: boolean, onClose: () => void, auth: AuthData }) {
+    const [downloading, setDownloading] = useState<string | null>(null);
+    const [downloadError, setDownloadError] = useState<string | null>(null);
+    if (!isOpen) return null;
+
+    const renderValue = (val: any, unit = '') => {
+        // Улучшенная проверка на пустоту: проверяем на undefined, null и строку, 
+        // которая после обрезки пробелов становится пустой.
+        if (val === undefined || val === null || (typeof val === 'string' && val.trim() === "")) return '-';
+        
+        // Обработка сложных объектов/массивов
+        if (typeof val === 'object' && val !== null && !React.isValidElement(val)) {
+            try {
+                if (Object.keys(val).length === 0) return '-';
+                return <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.75rem', margin: 0}}>{JSON.stringify(val, null, 2)}</pre>;
+            } catch (e) {
+                return String(val); 
+            }
+        }
+        
+        const num = typeof val === 'string' ? parseFloat(val) : val;
+        // Форматирование чисел
+        if (typeof num === 'number' && !isNaN(num)) {
+            if (unit.toLowerCase() === 'кг' || unit.toLowerCase() === 'м³') {
+                 // Округляем до двух знаков для кг и м³
+                return `${num.toFixed(2)}${unit ? ' ' + unit : ''}`;
+            }
+        }
+        
+        return `${val}${unit ? ' ' + unit : ''}`;
+    };
+    
+    const handleDownload = async (docType: string) => {
+        if (!item.Number) return alert("Нет номера перевозки");
+        setDownloading(docType); setDownloadError(null);
+        try {
+            const res = await fetch(PROXY_API_DOWNLOAD_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: auth.login, password: auth.password, metod: DOCUMENT_METHODS[docType], number: item.Number }) });
+            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+            const data = await res.json();
+
+if (!data?.data || !data.name) {
+    throw new Error("Ответ от сервера не содержит файл.");
+}
+
+// Декодируем base64 в бинарный файл
+const byteCharacters = atob(data.data);
+const byteNumbers = new Array(byteCharacters.length).fill(0).map((_, i) => byteCharacters.charCodeAt(i));
+const byteArray = new Uint8Array(byteNumbers);
+const blob = new Blob([byteArray], { type: "application/pdf" });
+
+const url = URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url;
+a.download = data.name || `${docType}_${item.Number}.pdf`;
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+        } catch (e: any) { setDownloadError(e.message); } finally { setDownloading(null); }
+    };
+
+    // Список явно отображаемых полей (из API примера)
+    const EXCLUDED_KEYS = ['Number', 'DatePrih', 'DateVr', 'State', 'Mest', 'PW', 'W', 'Value', 'Sum', 'StateBill', 'Sender'];
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    {/* Заголовок без "Перевозка" */}
+                    <button className="modal-close-button" onClick={onClose}><X size={20} /></button>
+                </div>
+                {downloadError && <p className="login-error mb-2">{downloadError}</p>}
+                
+                {/* Явно отображаемые поля (из API примера) */}
+                <div className="details-grid-modal">
+                    <DetailItem label="Номер" value={item.Number} />
+                    <DetailItem label="Статус" value={item.State} statusClass={getStatusClass(item.State)} />
+                    <DetailItem label="Приход" value={formatDate(item.DatePrih)} />
+                    <DetailItem label="Доставка" value={formatDate(item.DateVr)} /> {/* Используем DateVr */}
+                    <DetailItem label="Отправитель" value={item.Sender || '-'} /> {/* Добавляем Sender */}
+                    <DetailItem label="Мест" value={renderValue(item.Mest)} icon={<Layers className="w-4 h-4 mr-1 text-theme-primary"/>} />
+                    <DetailItem label="Плат. вес" value={renderValue(item.PW, 'кг')} icon={<Scale className="w-4 h-4 mr-1 text-theme-primary"/>} highlighted /> {/* Используем PW */}
+                    <DetailItem label="Вес" value={renderValue(item.W, 'кг')} icon={<Weight className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Используем W */}
+                    <DetailItem label="Объем" value={renderValue(item.Value, 'м³')} icon={<List className="w-4 h-4 mr-1 text-theme-primary"/>} /> {/* Используем Value */}
+                    <DetailItem label="Стоимость" value={formatCurrency(item.Sum)} icon={<RussianRuble className="w-4 h-4 mr-1 text-theme-primary"/>} />
+                    <DetailItem label="Статус Счета" value={item.StateBill || '-'} highlighted /> {/* Используем StateBill */}
+                </div>
+                
+                {/* ДОПОЛНИТЕЛЬНЫЕ поля из API - УДАЛЕН ЗАГОЛОВОК "Прочие данные из API" */}
+                
+                <div className="details-grid-modal">
+                    {Object.entries(item)
+                        .filter(([key]) => !EXCLUDED_KEYS.includes(key))
+                        .map(([key, val]) => {
+                            // Пропускаем, если значение пустое
+                            if (val === undefined || val === null || val === "" || (typeof val === 'string' && val.trim() === "") || (typeof val === 'object' && val !== null && Object.keys(val).length === 0)) return null; 
+                            // Пропускаем, если значение - 0
+                            if (val === 0 && key.toLowerCase().includes('date') === false) return null;
+                            
+                            return <DetailItem key={key} label={key} value={renderValue(val)} />;
+                        })}
+                </div>
+                
+                <h4 style={{marginTop: '1rem', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 600}}>Документы</h4>
+                <div className="document-buttons">
+                    {['ЭР', 'АПП', 'СЧЕТ', 'УПД'].map(doc => (
+                        <button key={doc} className="doc-button" onClick={() => handleDownload(doc)} disabled={downloading === doc}>
+                            {downloading === doc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 mr-2" />} {doc}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const DetailItem = ({ label, value, icon, statusClass, highlighted }: any) => (
+    <div className={`details-item-modal ${highlighted ? 'highlighted-detail' : ''}`}>
+        <div className="detail-item-label">{label}</div>
+        <div className={`detail-item-value flex items-center ${statusClass || ''}`}>{icon} {value}</div>
+    </div>
+);
+
+function StubPage({ title }: { title: string }) { return <div className="w-full p-8 text-center"><h2 className="title">{title}</h2><p className="subtitle">Раздел в разработке</p></div>; }
+
+function TabBar({ active, onChange }: { active: Tab, onChange: (t: Tab) => void }) {
+    return (
+        <div className="tabbar-container">
+            <TabBtn label="Главная" icon={<Home />} active={active === "home"} onClick={() => onChange("home")} />
+            <TabBtn label="" icon={<Truck />} active={active === "cargo"} onClick={() => onChange("cargo")} />
+            <TabBtn label="Документы" icon={<FileText />} active={active === "docs"} onClick={() => onChange("docs")} />
+            <TabBtn label="Поддержка" icon={<MessageCircle />} active={active === "support"} onClick={() => onChange("support")} />
+            <TabBtn label="Профиль" icon={<User />} active={active === "profile"} onClick={() => onChange("profile")} />
+        </div>
+    );
+}
+const TabBtn = ({ label, icon, active, onClick }: any) => (
+    <button className={`tab-button ${active ? 'active' : ''}`} onClick={onClick}>
+        <span className="tab-icon">{icon}</span>{label && <span className="tab-label">{label}</span>}
+    </button>
+);
+
+// ----------------- MAIN APP -----------------
 
 export default function App() {
-    const [auth, setAuth] = useState<AuthData | null>(null);
-    const [activeTab, setActiveTab] = useState<Tab>("cargo");
-    const [theme, setTheme] = useState("dark");
-
-    const [login, setLogin] = useState("");
-    const [password, setPassword] = useState("");
-
-    const [agree1, setAgree1] = useState(true);
-    const [agree2, setAgree2] = useState(true);
-
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const [showPassword, setShowPassword] = useState(false);
-    const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-    const [searchText, setSearchText] = useState("");
-
+    // --- Telegram Init ---
     useEffect(() => {
         if (!isTg()) return;
+
         WebApp.ready();
         WebApp.expand();
         setTheme(WebApp.colorScheme);
-        const handler = () => setTheme(WebApp.colorScheme);
-        WebApp.onEvent("themeChanged", handler);
-        return () => WebApp.offEvent("themeChanged", handler);
+
+        const themeHandler = () => setTheme(WebApp.colorScheme);
+        WebApp.onEvent("themeChanged", themeHandler);
+
+        return () => WebApp.offEvent("themeChanged", themeHandler);
     }, []);
 
-    useEffect(() => {
-        document.body.className = `${theme}-mode`;
-    }, [theme]);
+    const [auth, setAuth] = useState<AuthData | null>(null);
+    const [activeTab, setActiveTab] = useState<Tab>("cargo"); 
+    const [theme, setTheme] = useState('dark'); 
+    
+    // ИНИЦИАЛИЗАЦИЯ ПУСТЫМИ СТРОКАМИ (данные берутся с фронта)
+    const [login, setLogin] = useState(""); 
+    const [password, setPassword] = useState(""); 
+    
+    const [agreeOffer, setAgreeOffer] = useState(true);
+    const [agreePersonal, setAgreePersonal] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false); 
+    
+    const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+    const [searchText, setSearchText] = useState('');
 
-    const toggleTheme = () => setTheme(prev => prev === "dark" ? "light" : "dark");
-
-    const handleSearch = (text: string) => setSearchText(text.toLowerCase());
+    useEffect(() => { document.body.className = `${theme}-mode`; }, [theme]);
+    const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    const handleSearch = (text: string) => setSearchText(text.toLowerCase().trim());
 
     const handleLoginSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setError(null);
-
         if (!login || !password) return setError("Введите логин и пароль");
-        if (!agree1 || !agree2) return setError("Подтвердите согласие");
+        if (!agreeOffer || !agreePersonal) return setError("Подтвердите согласие с условиями");
 
         try {
             setLoading(true);
             const { dateFrom, dateTo } = getDateRange("all");
-
             const res = await fetch(PROXY_API_BASE_URL, {
-                method: "POST",
+                method: "POST", 
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ login, password, dateFrom, dateTo })
+                body: JSON.stringify({ login, password, dateFrom, dateTo }),
             });
 
             if (!res.ok) {
-                let msg = `Ошибка: ${res.status}`;
+                let message = `Ошибка авторизации: ${res.status}`;
                 try {
-                    const err = await res.json() as ApiError;
-                    if (err.error) msg = err.error;
-                } catch {}
-                setError(msg);
+                    const errorData = await res.json() as ApiError;
+                    if (errorData.error) message = errorData.error;
+                } catch { }
+                setError(message);
                 return;
             }
-
             setAuth({ login, password });
-            setActiveTab("cargo");
-
-        } catch {
-            setError("Ошибка сети");
+            setActiveTab("cargo"); 
+        } catch (err: any) {
+            setError("Ошибка сети.");
         } finally {
             setLoading(false);
         }
@@ -318,126 +865,85 @@ export default function App() {
 
     const handleLogout = () => {
         setAuth(null);
-        setPassword("");
-        setSearchText("");
-    };
+        setActiveTab("cargo");
+        setPassword(""); 
+        setIsSearchExpanded(false); setSearchText('');
+    }
 
     if (!auth) {
         return (
-            <div className="app-container login-form-wrapper">
+            <div className={`app-container login-form-wrapper`}>
                 <div className="login-card">
                     <div className="absolute top-4 right-4">
-                        <button onClick={toggleTheme}>
-                            {theme === 'dark' ? "🌞" : "🌙"}
+                        <button className="theme-toggle-button-login" onClick={toggleTheme} title={theme === 'dark' ? 'Светлый режим' : 'Темный режим'}>
+                            {/* ИСПРАВЛЕНИЕ: Убран class text-yellow-400 */}
+                            {theme === 'dark' 
+                                ? <Sun className="w-5 h-5" /> 
+                                : <Moon className="w-5 h-5" />}
                         </button>
                     </div>
-
-                    <div className="logo-text">HAULZ</div>
-
+                    <div className="flex justify-center mb-4 h-10 mt-6"><div className="logo-text">HAULZ</div></div>
+                    <div className="tagline">Доставка грузов в Калининград и обратно</div>
                     <form onSubmit={handleLoginSubmit} className="form">
-                        <input 
-                            className="login-input"
-                            placeholder="Логин"
-                            value={login}
-                            onChange={e => setLogin(e.target.value)}
-                        />
-                        <div className="password-input-container">
-                            <input 
-                                className="login-input"
-                                type={showPassword ? "text" : "password"}
-                                placeholder="Пароль"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                            />
-                            <button type="button" className="toggle-password-visibility"
-                                onClick={() => setShowPassword(!showPassword)}>
-                                {showPassword ? "🙈" : "👁️"}
-                            </button>
+                        <div className="field">
+                            <input className="login-input" type="text" placeholder="Логин (email)" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" />
                         </div>
-
-                        <button className="button-primary" disabled={loading}>
-                            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : "Войти"}
+                        <div className="field">
+                            <div className="password-input-container">
+                                <input className="login-input password" type={showPassword ? "text" : "password"} placeholder="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" style={{paddingRight: '3rem'}} />
+                                <button type="button" className="toggle-password-visibility" onClick={() => setShowPassword(!showPassword)}>
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
+                        </div>
+                        {/* ТУМБЛЕРЫ ВОССТАНОВЛЕНЫ */}
+                        <label className="checkbox-row switch-wrapper">
+                            <span>Согласие с <a href="#">публичной офертой</a></span>
+                            <div className={`switch-container ${agreeOffer ? 'checked' : ''}`} onClick={() => setAgreeOffer(!agreeOffer)}><div className="switch-knob"></div></div>
+                        </label>
+                        <label className="checkbox-row switch-wrapper">
+                            <span>Согласие на <a href="#">обработку данных</a></span>
+                            <div className={`switch-container ${agreePersonal ? 'checked' : ''}`} onClick={() => setAgreePersonal(!agreePersonal)}><div className="switch-knob"></div></div>
+                        </label>
+                        <button className="button-primary" type="submit" disabled={loading}>
+                            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : "Подтвердить"}
                         </button>
                     </form>
-
-                    {error && (
-                        <p className="login-error mt-4">
-                            <AlertTriangle className="w-5 h-5 mr-2" /> {error}
-                        </p>
-                    )}
+                    {error && <p className="login-error mt-4"><AlertTriangle className="w-5 h-5 mr-2" />{error}</p>}
                 </div>
             </div>
         );
     }
 
-
-    /* ============================================================
-                           AUTHENTICATED VIEW
-       ============================================================ */
-
     return (
-        <div className="app-container">
+        <div className={`app-container`}>
             <header className="app-header">
                 <div className="header-top-row">
-                    <div className="header-auth-info">
-                        <UserIcon className="w-4 h-4 mr-2" />
-                        <span>{auth.login}</span>
-                    </div>
-
+                    <div className="header-auth-info"><UserIcon className="w-4 h-4 mr-2" /><span>{auth.login}</span></div>
                     <div className="flex items-center space-x-3">
-
-                        {/* SEARCH BUTTON */}
-                        <button 
-                            className="search-toggle-button"
-                            onClick={() => {
-                                setIsSearchExpanded(!isSearchExpanded);
-                                if (isSearchExpanded) {
-                                    handleSearch("");
-                                    setSearchText("");
-                                }
-                            }}
-                        >
-                            {isSearchExpanded ? <X /> : <Search />}
+                        <button className="search-toggle-button" onClick={() => { setIsSearchExpanded(!isSearchExpanded); if(isSearchExpanded) { handleSearch(''); setSearchText(''); } }}>
+                            {isSearchExpanded ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
                         </button>
-
-                        {/* LOGOUT */}
-                        <button className="search-toggle-button" onClick={handleLogout}>
-                            <LogOut />
+                        <button className="search-toggle-button" onClick={handleLogout} title="Выход">
+                            <LogOut className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
-
-                {/* SEARCH INPUT */}
-                <div className={`search-container ${isSearchExpanded ? "expanded" : "collapsed"}`}>
-                    <Search className="w-5 h-5 ml-1 text-theme-secondary" />
-                    <input 
-                        type="search"
-                        className="search-input"
-                        placeholder="Поиск..."
-                        value={searchText}
-                        onChange={e => {
-                            setSearchText(e.target.value);
-                            handleSearch(e.target.value);
-                        }}
-                    />
-                    {searchText && (
-                        <button 
-                            className="search-toggle-button"
-                            onClick={() => {
-                                setSearchText("");
-                                handleSearch("");
-                            }}
-                        >
-                            <X />
-                        </button>
-                    )}
+                <div className={`search-container ${isSearchExpanded ? 'expanded' : 'collapsed'}`}>
+                    <Search className="w-5 h-5 text-theme-secondary flex-shrink-0 ml-1" />
+                    <input type="search" placeholder="Поиск..." className="search-input" value={searchText} onChange={(e) => { setSearchText(e.target.value); handleSearch(e.target.value); }} />
+                    {searchText && <button className="search-toggle-button" onClick={() => { setSearchText(''); handleSearch(''); }}><X className="w-4 h-4" /></button>}
                 </div>
             </header>
-
             <div className="app-main">
-                <CargoPage auth={auth} searchText={searchText} />
+                <div className="w-full max-w-4xl">
+                    {activeTab === "home" && <HomePage auth={auth} />}
+                    {activeTab === "cargo" && <CargoPage auth={auth} searchText={searchText} />}
+                    {activeTab === "docs" && <StubPage title="Документы" />}
+                    {activeTab === "support" && <StubPage title="Поддержка" />}
+                    {activeTab === "profile" && <StubPage title="Профиль" />}
+                </div>
             </div>
-
             <TabBar active={activeTab} onChange={setActiveTab} />
         </div>
     );
