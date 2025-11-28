@@ -887,7 +887,7 @@ export default function App() {
                         </button>
                     </div>
                     <div className="flex justify-center mb-4 h-10 mt-6"><div className="logo-text">HAULZ</div></div>
-                    <div className="tagline">Доставка грузов в Калининград и обратно</div>
+                    <div className="tagline">Вход для партнеров</div>
                     <form onSubmit={handleLoginSubmit} className="form">
                         <div className="field">
                             <input className="login-input" type="text" placeholder="Логин (email)" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" />
