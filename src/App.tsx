@@ -1,79 +1,83 @@
-.login-form-wrapper {
-  display: flex;
-  justify-content: center;
-  padding: 40px 16px;
-}
+if (!isLogged) {
+  return (
+    <div className="login-form-wrapper">
+      <div className="login-card">
 
-.login-card {
-  background: var(--color-bg-secondary, #ffffff);
-  padding: 32px;
-  border-radius: 18px;
-  max-width: 420px;
-  width: 100%;
-  border: 1px solid #e5e7eb;
-}
+        {/* HEADER WITH LOGO + THEME SWITCH */}
+        <div className="login-header-row">
+          <div className="logo-text">HAULZ</div>
 
-.login-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+          {/* OLD STYLE THEME TOGGLER */}
+          <div className="switch-wrapper" onClick={toggleTheme}>
+            <div className="switch-container">
+              <div
+                className="switch-knob"
+                style={{
+                  transform:
+                    theme === "dark"
+                      ? "translateX(18px)"
+                      : "translateX(0px)",
+                }}
+              />
+            </div>
+          </div>
+        </div>
 
-.logo-text {
-  font-size: 32px;
-  font-weight: 800;
-  color: #4a7fff;
-  text-align: center;
-}
+        {/* SUBTITLE */}
+        <p className="login-subtitle">
+          Доставка грузов в Калининград и обратно
+        </p>
 
-.login-subtitle {
-  text-align: center;
-  color: #6b7280;
-  margin-bottom: 24px;
-  margin-top: 12px;
-}
+        {/* FORM */}
+        <form className="form" onSubmit={handleLogin}>
 
-.login-input {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 1px solid #d1d5db;
-  background: #f3f4f6;
-  font-size: 16px;
-  outline: none;
-}
+          {/* LOGIN FIELD */}
+          <div className="field">
+            <input
+              className="login-input"
+              placeholder="Логин (email)"
+              value={auth.login}
+              onChange={(e) =>
+                setAuth({ ...auth, login: e.target.value })
+              }
+            />
+          </div>
 
-.field {
-  margin-bottom: 18px;
-}
+          {/* PASSWORD FIELD + EYE ICON */}
+          <div className="field password-input-container">
+            <input
+              type={showPassword ? "text" : "password"}
+              className="login-input"
+              placeholder="Пароль"
+              value={auth.password}
+              onChange={(e) =>
+                setAuth({ ...auth, password: e.target.value })
+              }
+            />
 
-.password-input-container {
-  position: relative;
-}
+            <button
+              type="button"
+              className="password-visibility"
+              onClick={() => setShowPassword((prev) => !prev)}
+            >
+              {showPassword ? "🙈" : "👁"}
+            </button>
+          </div>
 
-.password-visibility {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
-}
+          {loginError && (
+            <div className="error-text">{loginError}</div>
+          )}
 
-.button-primary {
-  width: 100%;
-  padding: 14px;
-  border-radius: 10px;
-  background: #4a7fff;
-  color: white;
-  font-size: 18px;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-}
-
-.button-primary:disabled {
-  opacity: 0.6;
+          {/* LOGIN BUTTON */}
+          <button
+            className="button-primary"
+            type="submit"
+            disabled={loadingLogin}
+          >
+            {loadingLogin ? "Входим..." : "Подтвердить"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
 }
